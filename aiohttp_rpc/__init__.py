@@ -1,4 +1,4 @@
-from .client import JsonRpcHTTPClient
-from .rpc import JsonRpcManager, default_rpc_manager
+from .client import JsonRpcClient
+from .server import JsonRpcServer, default_rpc_server
 from .protocol import JsonRpcMethod
 from .decorators import rpc_method

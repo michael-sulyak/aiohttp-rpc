@@ -1,4 +1,5 @@
 import typing
+from traceback import format_exception_only
 
 from . import constants, exceptions
 
@@ -43,3 +44,7 @@ def parse_args_and_kwargs(args: typing.Any, kwargs: typing.Any) -> typing.Tuple:
         args = []
 
     return params, args, kwargs
+
+
+def exc_message(exp: Exception) -> str:
+    return ''.join(format_exception_only(exp.__class__, exp)).strip()

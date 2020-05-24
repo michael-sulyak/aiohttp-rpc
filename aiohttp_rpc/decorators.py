@@ -1,11 +1,11 @@
 import typing
 
 from .protocol import JsonRpcMethod
-from .rpc import JsonRpcManager, default_rpc_manager
+from .server import JsonRpcServer, default_rpc_server
 
 
 def rpc_method(prefix: str = '', *,
-               rpc_manager: JsonRpcManager = default_rpc_manager,
+               rpc_manager: JsonRpcServer = default_rpc_server,
                custom_name: typing.Optional[str] = None,
                without_extra_args: bool = False) -> typing.Callable:
     def _decorator(func: typing.Callable) -> typing.Callable:

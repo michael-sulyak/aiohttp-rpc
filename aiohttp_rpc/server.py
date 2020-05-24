@@ -5,53 +5,47 @@ from functools import partial
 
 from aiohttp import web
 
-from . import constants, exceptions, utils
-from .protocol import JsonRpcMethod, JsonRpcRequest, JsonRpcResponse
-from .constants import NOTHING
+from . import constants, exceptions
+from . import protocol
 
 
 api_routes = web.RouteTableDef()
 
 
-class JsonRpcManager:
-    methods: typing.Dict[str, JsonRpcMethod]
+class JsonRpcServer:
+    methods: typing.Dict[str, protocol.JsonRpcMethod]
     dumps = partial(json.dumps, default=lambda x: repr(x))
 
     def __init__(self) -> None:
         self.methods = {
-            'get_methods': JsonRpcMethod('', self.get_methods),
+            'get_methods': protocol.JsonRpcMethod('', self.get_methods),
         }
 
     def add_method(self,
-                   method: typing.Union[JsonRpcMethod, tuple, list, typing.Callable], *,
+                   method: typing.Union[protocol.JsonRpcMethod, tuple, list, typing.Callable], *,
                    replace: bool = False) -> None:
-        if not isinstance(method, JsonRpcMethod):
+        if not isinstance(method, protocol.JsonRpcMethod):
             if callable(method):
-                method = JsonRpcMethod('', method)
+                method = protocol.JsonRpcMethod('', method)
             elif isinstance(method, (tuple, list,)):
-                method = JsonRpcMethod(*method)
+                method = protocol.JsonRpcMethod(*method)
 
         if not replace and method.name in self.methods:
-            raise exceptions.JsonRpcError(f'Method {method.name} has already been added.')
+            raise exceptions.InvalidParams(f'Method {method.name} has already been added.')
 
         self.methods[method.name] = method
 
     def add_methods(self,
-                    methods: typing.Iterable[typing.Union[JsonRpcMethod, tuple, list]], *,
+                    methods: typing.Iterable[typing.Union[protocol.JsonRpcMethod, tuple, list, typing.Callable]], *,
                     replace: bool = False) -> None:
         for method in methods:
             self.add_method(method, replace=replace)
 
     async def call(self,
                    method: str, *,
-                   params: typing.Optional[list] = constants.NOTHING,
                    args: typing.Optional[list] = None,
                    kwargs: typing.Optional[dict] = None,
                    extra_kwargs: typing.Optional[dict] = None) -> typing.Any:
-        if params is not constants.NOTHING:
-            assert args is None and args is None
-            args, kwargs = utils.convert_params_to_args_and_kwargs(params)
-
         if args is None:
             args = []
 
@@ -67,7 +61,7 @@ class JsonRpcManager:
         try:
             input_data = await request.json()
         except json.JSONDecodeError:
-            rpc_response = JsonRpcResponse(error=exceptions.ParseError())
+            rpc_response = protocol.JsonRpcResponse(error=exceptions.ParseError())
             return web.json_response(rpc_response.to_dict(), dumps=self.dumps)
 
         output_data = await self.process_input_data(input_data, http_request=request)
@@ -84,16 +78,16 @@ class JsonRpcManager:
 
         for raw_rcp_request in raw_rcp_requests:
             msg_id = raw_rcp_request.get('id')
-            params = raw_rcp_request.get('params', NOTHING)
-            jsonrpc = raw_rcp_request.get('jsonrpc', '2.0')
+            params = raw_rcp_request.get('params', constants.NOTHING)
+            jsonrpc = raw_rcp_request.get('jsonrpc', constants.VERSION_2_0)
 
             try:
                 method = raw_rcp_request['method']
             except KeyError:
-                rpc_response = JsonRpcResponse(msg_id=msg_id, error=exceptions.InvalidParams())
+                rpc_response = protocol.JsonRpcResponse(msg_id=msg_id, error=exceptions.InvalidParams())
                 return web.json_response(rpc_response.to_dict(), dumps=self.dumps)
 
-            rpc_request = JsonRpcRequest(
+            rpc_request = protocol.JsonRpcRequest(
                 msg_id=msg_id,
                 method=method,
                 params=params,
@@ -101,7 +95,7 @@ class JsonRpcManager:
                 http_request=http_request,
             )
 
-            rpc_response = await self.process_rpc_request(rpc_request)
+            rpc_response = await self.process_single_rpc_request(rpc_request)
             result.append(rpc_response.to_dict())
 
         if isinstance(data, dict):
@@ -109,14 +103,14 @@ class JsonRpcManager:
 
         return result
 
-    async def process_rpc_request(self, rpc_request: JsonRpcRequest) -> JsonRpcResponse:
-        rpc_response = JsonRpcResponse(
+    async def process_single_rpc_request(self, rpc_request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
+        rpc_response = protocol.JsonRpcResponse(
             msg_id=rpc_request.msg_id,
             jsonrpc=rpc_request.jsonrpc,
         )
 
         try:
-            rpc_response.result = await default_rpc_manager.call(
+            rpc_response.result = await self.call(
                 rpc_request.method,
                 args=rpc_request.args,
                 kwargs=rpc_request.kwargs,
@@ -126,7 +120,7 @@ class JsonRpcManager:
             rpc_response.error = e
         except Exception as e:
             logging.warning(e, exc_info=True)
-            rpc_response.error = exceptions.InternalError(data=repr(e))
+            rpc_response.error = exceptions.InternalError().with_traceback()
 
         return rpc_response
 
@@ -142,5 +136,5 @@ class JsonRpcManager:
         return result
 
 
-default_rpc_manager = JsonRpcManager()
+default_rpc_server = JsonRpcServer()
 

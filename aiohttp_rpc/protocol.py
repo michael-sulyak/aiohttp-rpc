@@ -22,7 +22,7 @@ class JsonRpcRequest:
     def __init__(self, *,
                  msg_id: typing.Any,
                  method: str,
-                 jsonrpc: str = '2.0',
+                 jsonrpc: str = constants.VERSION_2_0,
                  params: typing.Any = constants.NOTHING,
                  args: typing.Any = None,
                  kwargs: typing.Any = None,
@@ -32,14 +32,17 @@ class JsonRpcRequest:
         self.jsonrpc = jsonrpc
         self.http_request = http_request
 
-        if params is not constants.NOTHING:
+        if self.jsonrpc != constants.VERSION_2_0:
+            raise exceptions.InvalidRequest
+
+        if params is constants.NOTHING:
+            self.params, self.args, self.kwargs = utils.parse_args_and_kwargs(args, kwargs)
+        else:
             if args is not None or kwargs is not None:
                 raise exceptions.InvalidParams('Need use params or args with kwargs.')
 
             self.params = params
             self.args, self.kwargs = utils.convert_params_to_args_and_kwargs(params)
-        else:
-            self.params, self.args, self.kwargs = utils.parse_args_and_kwargs(args, kwargs)
 
     def to_dict(self) -> dict:
         data = {
@@ -56,13 +59,13 @@ class JsonRpcRequest:
 
 @dataclass
 class JsonRpcResponse:
-    jsonrpc: str = '2.0'
+    jsonrpc: str = constants.VERSION_2_0
     msg_id: typing.Any = None
     result: typing.Any = None
     error: exceptions.JsonRpcError = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'JsonRpcResponse':
+    def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None) -> 'JsonRpcResponse':
         if 'id' not in data:
             raise exceptions.ParseError(data=data)
 
@@ -71,12 +74,17 @@ class JsonRpcResponse:
 
         rpc_response = cls(
             msg_id=data['id'],
-            jsonrpc=data.get('jsonrpc', '2.0'),
+            jsonrpc=data.get('jsonrpc', constants.VERSION_2_0),
             result=data.get('result'),
         )
 
         if 'error' in data:
-            rpc_response.error = exceptions.JsonRpcError(
+            if error_map:
+                exception_class = error_map.get(data['error']['code'], exceptions.JsonRpcError)
+            else:
+                exception_class = exceptions.JsonRpcError
+
+            rpc_response.error = exception_class(
                 message=data['error']['message'],
                 data=data['error'].get('data'),
                 code=data['error']['code'],
@@ -184,4 +192,4 @@ class JsonRpcMethod:
             raise
         except Exception as e:
             logging.exception(e)
-            raise exceptions.JsonRpcError from e
+            raise exceptions.InternalError().with_traceback() from e
