@@ -7,7 +7,7 @@ from setuptools import find_packages, setup
 if __name__ == '__main__':
     setup(
         name='aiohttp-rpc',
-        version='0.2.0',
+        version='0.2.1',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',
