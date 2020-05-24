@@ -89,12 +89,12 @@ class JsonRpcClient:
     async def send_raw_data(self, data: typing.Any) -> typing.Any:
         return await self._session.post(self._url, json=data)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> 'JsonRpcClient':
         if not self._session:
             self._session = aiohttp.ClientSession(json_serialize=self._json_serializer)
 
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         if not self._is_outer_session:
             await self._session.close()

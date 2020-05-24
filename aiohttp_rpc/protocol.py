@@ -157,13 +157,50 @@ class JsonRpcMethod:
         self.is_coroutine = asyncio.iscoroutinefunction(self.method)
 
     async def __call__(self, args: list, kwargs: dict, extra_kwargs: typing.Optional[dict] = None) -> typing.Any:
-        extra_kwargs_ = {}
+        if not self.without_extra_args and extra_kwargs:
+            args, kwargs = self._add_extra_kwargs_in_args_and_kwargs(args, kwargs, extra_kwargs)
 
-        if not self.without_extra_args and extra_kwargs is not None:
-            for key, value in extra_kwargs.items():
-                if key in self.all_supported_args:
-                    extra_kwargs_[key] = value
+        self._validate_arg_and_kwargs(args, kwargs)
 
+        try:
+            if self.is_coroutine:
+                return await self.method(*args, **kwargs)
+            else:
+                return self.method(*args, **kwargs)
+        except exceptions.JsonRpcError:
+            raise
+        except Exception as e:
+            logging.exception(e)
+            raise exceptions.InternalError().with_traceback() from e
+
+    def _add_extra_kwargs_in_args_and_kwargs(self,
+                                             args: list,
+                                             kwargs: dict,
+                                             extra_kwargs: typing.Optional[dict] = None) -> typing.Tuple[list, dict]:
+        extra_kwargs_ = set(extra_kwargs.keys())
+        args_ = []
+        kwargs_ = {}
+
+        for supported_arg in self.supported_args:
+            if supported_arg not in extra_kwargs_:
+                break
+
+            args_.append(extra_kwargs[supported_arg])
+            extra_kwargs_.remove(supported_arg)
+
+        for extra_kwarg in extra_kwargs_:
+            if extra_kwarg in self.supported_kwargs and extra_kwarg not in kwargs:
+                kwargs_[extra_kwarg] = extra_kwargs[extra_kwarg]
+
+        if args_:
+            args = [*args_, *args]
+
+        if kwargs_:
+            kwargs = {**kwargs, **kwargs_}
+
+        return args, kwargs
+
+    def _validate_arg_and_kwargs(self, args: list, kwargs: dict) -> None:
         kwargs_keys = set(kwargs.keys())
 
         if self.required_args:
@@ -171,25 +208,14 @@ class JsonRpcMethod:
         else:
             required_args = self.required_args
 
-        if required_args and len(self.required_kwargs) > len(args):
-            raise exceptions.InvalidParams
+        if required_args and len(self.required_args) > len(args):
+            raise exceptions.InvalidParams('Method required more positional arguments.')
 
         if self.required_kwargs and len(self.required_kwargs - kwargs_keys) > 0:
-            raise exceptions.InvalidParams
-
-        if not self.has_varkw and len(kwargs_keys - self.all_supported_args) > 0:
-            raise exceptions.InvalidParams
+            raise exceptions.InvalidParams('Method required more keyword-only arguments.')
 
         if not self.has_varargs and len(self.supported_args) < len(args):
-            raise exceptions.InvalidParams
+            raise exceptions.InvalidParams('Method required less keyword-only arguments.')
 
-        try:
-            if self.is_coroutine:
-                return await self.method(*args, **kwargs, **extra_kwargs_)
-            else:
-                return self.method(*args, **kwargs, **extra_kwargs_)
-        except exceptions.JsonRpcError:
-            raise
-        except Exception as e:
-            logging.exception(e)
-            raise exceptions.InternalError().with_traceback() from e
+        if not self.has_varkw and len(kwargs_keys - self.all_supported_args) > 0:
+            raise exceptions.InvalidParams('Method required less positional arguments.')

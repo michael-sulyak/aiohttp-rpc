@@ -88,3 +88,24 @@ async def test_varkw(aiohttp_client):
 
         assert await rpc.call('method', a=1, b=2) == [1, {'b': 2}]
 
+
+@pytest.mark.asyncio
+async def test_extra_kwargs(aiohttp_client):
+    def method(rpc_request):
+        return rpc_request.__class__.__name__
+
+    def method_2(*, rpc_request):
+        return rpc_request.__class__.__name__
+
+    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server.add_method(method)
+    rpc_server.add_method(method_2)
+
+    assert await rpc_server.call('method', extra_kwargs={'rpc_request': 123}), 123
+    assert await rpc_server.call('method_2', extra_kwargs={'rpc_request': 123}), 123
+
+    client = await utils.make_client(aiohttp_client, rpc_server)
+
+    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+        assert await rpc.call('method') == 'JsonRpcRequest'
+        assert await rpc.call('method_2') == 'JsonRpcRequest'

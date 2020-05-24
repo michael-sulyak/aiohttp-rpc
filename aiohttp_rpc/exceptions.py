@@ -20,7 +20,7 @@ class JsonRpcError(RuntimeError):
 
     def with_traceback(self, exc_info=None, traceback_exception=None) -> 'JsonRpcError':
         if not traceback_exception:
-            traceback_exception = traceback.TracebackException(*(exc_info or sys.exc_info()))
+            traceback_exception = traceback.TracebackException(*sys.exc_info())
 
         if self.data is None:
             self.data = {}
