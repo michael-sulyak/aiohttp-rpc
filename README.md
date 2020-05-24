@@ -64,6 +64,11 @@ async def run():
         print(await rpc.proxy(a=4, b=6))
         print(await rpc.call('proxy', a=4, b=6))
         print(await rpc.proxy(1, 2, 3))
+        print(await rpc.bulk_call((
+            ('proxy', 2,), 
+            'proxy2',
+            'hi',
+        )))
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(run())
