@@ -32,6 +32,7 @@ pip install aiohttp-rpc
 
 ### HTTP Server Example
 ```python3
+import asyncio
 from aiohttp import web
 import aiohttp_rpc
 
@@ -43,23 +44,21 @@ def proxy(*args, **kwargs):
         'kwargs': kwargs,
     }
 
-async def ping(request):
+async def ping(rpc_request):
     return 'pong'
 
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-
-    aiohttp_rpc.default_rpc_manager.add_methods((
+    aiohttp_rpc.default_rpc_server.add_methods([
         ('', ping,),
-    ))
+    ])
 
-    app = Application(loop=loop)
+    app = web.Application()
     app.router.add_routes((
-        web.post('/rpc', aiohttp_rpc.default_rpc_manager.handle_request),
+        web.post('/rpc', aiohttp_rpc.default_rpc_server.handle_request),
     ))
 
-    run_app(app, host='0.0.0.0', port=8080)
+    web.run_app(app, host='0.0.0.0', port=8080)
 ```
 
 
@@ -69,15 +68,16 @@ import aiohttp_rpc
 import asyncio
 
 async def run():
-    async with aiohttp_rpc.JsonRpcHTTPClient('http://0.0.0.0:8080/rpc') as rpc:
+    async with aiohttp_rpc.JsonRpcClient('http://0.0.0.0:8080/rpc') as rpc:
+        print(await rpc.ping())
         print(await rpc.proxy(a=4, b=6))
         print(await rpc.call('proxy', a=4, b=6))
         print(await rpc.proxy(1, 2, 3))
-        print(await rpc.bulk_call((
+        print(await rpc.batch([
             ('proxy', 2,), 
             'proxy2',
             'hi',
-        )))
+        ]))
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(run())
