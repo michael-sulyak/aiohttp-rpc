@@ -5,8 +5,10 @@ from functools import partial
 
 from aiohttp import web
 
-from . import exceptions
+from . import constants, exceptions, utils
 from .protocol import JsonRpcMethod, JsonRpcRequest, JsonRpcResponse
+from .constants import NOTHING
+
 
 api_routes = web.RouteTableDef()
 
@@ -20,32 +22,47 @@ class JsonRpcManager:
             'get_methods': JsonRpcMethod('', self.get_methods),
         }
 
-    def add_method(self, method: typing.Union[JsonRpcMethod, tuple, list]) -> None:
-        if isinstance(method, (tuple, list,)):
-            method = JsonRpcMethod(*method)
+    def add_method(self,
+                   method: typing.Union[JsonRpcMethod, tuple, list, typing.Callable], *,
+                   replace: bool = False) -> None:
+        if not isinstance(method, JsonRpcMethod):
+            if callable(method):
+                method = JsonRpcMethod('', method)
+            elif isinstance(method, (tuple, list,)):
+                method = JsonRpcMethod(*method)
+
+        if not replace and method.name in self.methods:
+            raise exceptions.JsonRpcError(f'Method {method.name} has already been added.')
 
         self.methods[method.name] = method
 
-    def add_methods(self, methods: typing.Iterable[typing.Union[JsonRpcMethod, tuple, list]]) -> None:
+    def add_methods(self,
+                    methods: typing.Iterable[typing.Union[JsonRpcMethod, tuple, list]], *,
+                    replace: bool = False) -> None:
         for method in methods:
-            self.add_method(method)
+            self.add_method(method, replace=replace)
 
-    async def call(self, rpc_request: JsonRpcRequest) -> typing.Any:
-        if rpc_request.method not in self.methods:
-            raise exceptions.MethodNotFound
+    async def call(self,
+                   method: str, *,
+                   params: typing.Optional[list] = constants.NOTHING,
+                   args: typing.Optional[list] = None,
+                   kwargs: typing.Optional[dict] = None,
+                   extra_kwargs: typing.Optional[dict] = None) -> typing.Any:
+        if params is not constants.NOTHING:
+            assert args is None and args is None
+            args, kwargs = utils.convert_params_to_args_and_kwargs(params)
 
-        return await self.methods[rpc_request.method](
-            rpc_request.args,
-            rpc_request.kwargs,
-            extra_kwargs={
-                'rpc_request': rpc_request,
-                'request': rpc_request.http_request,
-            },
-        )
+        if args is None:
+            args = []
+
+        if kwargs is None:
+            kwargs = {}
+
+        return await self.methods[method](args=args, kwargs=kwargs, extra_kwargs=extra_kwargs)
 
     async def handle_request(self, request: web.Request) -> web.Response:
         if request.method != 'POST':
-            return web.Response(status=405)
+            return web.HTTPMethodNotAllowed(method=request.method, allowed_methods=('POST',))
 
         try:
             input_data = await request.json()
@@ -66,8 +83,8 @@ class JsonRpcManager:
         result = []
 
         for raw_rcp_request in raw_rcp_requests:
-            msg_id = data.get('id')
-            params = raw_rcp_request.get('params')
+            msg_id = raw_rcp_request.get('id')
+            params = raw_rcp_request.get('params', NOTHING)
             jsonrpc = raw_rcp_request.get('jsonrpc', '2.0')
 
             try:
@@ -99,7 +116,12 @@ class JsonRpcManager:
         )
 
         try:
-            rpc_response.result = await default_rpc_manager.call(rpc_request)
+            rpc_response.result = await default_rpc_manager.call(
+                rpc_request.method,
+                args=rpc_request.args,
+                kwargs=rpc_request.kwargs,
+                extra_kwargs={'rpc_request': rpc_request},
+            )
         except exceptions.JsonRpcError as e:
             rpc_response.error = e
         except Exception as e:

@@ -17,7 +17,7 @@ class JsonRpcError(RuntimeError):
         self.code = code or self.code
         assert self.code, 'Error without code is not allowed.'
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f'JsonRpcError({self.code}): {self.message}'
 
 
