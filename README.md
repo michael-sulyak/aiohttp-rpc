@@ -1,6 +1,6 @@
 # aiohttp-rpc
 
-[![NPM](https://img.shields.io/pypi/v/aiohttp-rpc.svg?style=flat-square)](https://www.npmjs.com/package/aiohttp-rpc)  [![Scrutinizer Code Quality](https://img.shields.io/scrutinizer/g/expert-m/aiohttp-rpc.svg?style=flat-square)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/?branch=master)  [![Build Status](https://img.shields.io/scrutinizer/build/g/expert-m/aiohttp-rpc.svg?style=flat-square)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/build-status/master)  [![GitHub Issues](https://img.shields.io/github/issues/expert-m/aiohttp-rpc.svg?style=flat-square)](https://github.com/expert-m/aiohttp-rpc/issues) [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![NPM](https://img.shields.io/pypi/v/aiohttp-rpc.svg?style=flat-square)](https://pypi.org/project/aiohttp-rpc/) [![Scrutinizer Code Quality](https://img.shields.io/scrutinizer/g/expert-m/aiohttp-rpc.svg?style=flat-square)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/?branch=master)  [![Build Status](https://img.shields.io/scrutinizer/build/g/expert-m/aiohttp-rpc.svg?style=flat-square)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/build-status/master)  [![GitHub Issues](https://img.shields.io/github/issues/expert-m/aiohttp-rpc.svg?style=flat-square)](https://github.com/expert-m/aiohttp-rpc/issues) [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 > Implements JSON-RPC 2.0 using aiohttp
 
