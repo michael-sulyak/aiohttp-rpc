@@ -1,8 +1,13 @@
-import aiohttp_rpc
+import os
+import sys
 
 import pytest
 
-from aiohttp_rpc import exceptions
+import aiohttp_rpc
+from aiohttp_rpc import errors
+
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from tests import utils
 
 
@@ -32,7 +37,7 @@ async def test_kwargs(aiohttp_client):
     rpc_server = aiohttp_rpc.JsonRpcServer()
     rpc_server.add_method(method)
 
-    with pytest.raises(exceptions.InvalidParams):
+    with pytest.raises(errors.InvalidParams):
         await rpc_server.call('method', args=[1, 2])
 
     assert await rpc_server.call('method', kwargs={'a': 1, 'b': 2}) == [1, 1, 2]
@@ -43,7 +48,7 @@ async def test_kwargs(aiohttp_client):
     async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.call('method', a=1, b=2) == [1, 1, 2]
 
-        with pytest.raises(exceptions.InvalidParams):
+        with pytest.raises(errors.InvalidParams):
             await rpc.call('method', 2, b=2)
 
 
@@ -75,7 +80,7 @@ async def test_varkw(aiohttp_client):
     rpc_server = aiohttp_rpc.JsonRpcServer()
     rpc_server.add_method(method)
 
-    with pytest.raises(exceptions.InvalidParams):
+    with pytest.raises(errors.InvalidParams):
         await rpc_server.call('method', args=[1, 2])
 
     assert await rpc_server.call('method', kwargs={'a': 1, 'b': 2}) == [1, {'b': 2}]
@@ -83,7 +88,7 @@ async def test_varkw(aiohttp_client):
     client = await utils.make_client(aiohttp_client, rpc_server)
 
     async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        with pytest.raises(exceptions.InvalidParams):
+        with pytest.raises(errors.InvalidParams):
             await rpc.call('method', 1, 2)
 
         assert await rpc.call('method', a=1, b=2) == [1, {'b': 2}]
@@ -101,8 +106,8 @@ async def test_extra_kwargs(aiohttp_client):
     rpc_server.add_method(method)
     rpc_server.add_method(method_2)
 
-    assert await rpc_server.call('method', extra_kwargs={'rpc_request': 123}), 123
-    assert await rpc_server.call('method_2', extra_kwargs={'rpc_request': 123}), 123
+    assert await rpc_server.call('method', extra_args={'rpc_request': 123}), 123
+    assert await rpc_server.call('method_2', extra_args={'rpc_request': 123}), 123
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
