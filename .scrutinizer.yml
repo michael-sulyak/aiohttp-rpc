@@ -1,0 +1,14 @@
+build:
+  environment:
+    python: 3.8.0
+
+  dependencies:
+    before:
+      - pip install poetry==1.0.5
+      - poetry config virtualenvs.create false
+      - poetry install
+
+  tests:
+    override:
+      -
+        command: 'tox'
