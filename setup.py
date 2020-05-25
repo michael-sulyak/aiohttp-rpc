@@ -5,14 +5,17 @@ from setuptools import find_packages, setup
 
 
 if __name__ == '__main__':
+    with open('README.md') as file:
+        long_description = file.read()
+
     setup(
         name='aiohttp-rpc',
-        version='0.2.1',
+        version='0.3.0',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',
         keywords=[
-            'aiohttp', 'asyncio', 'json-rpc',
+            'aiohttp', 'asyncio', 'json-rpc', 'rpc',
         ],
         install_requires=[
             'aiohttp>=3,<4',
@@ -30,7 +33,17 @@ if __name__ == '__main__':
             'Intended Audience :: Developers',
             'License :: OSI Approved :: MIT License',
             'Operating System :: OS Independent',
+            'Programming Language :: Python',
             'Programming Language :: Python :: 3',
+            'Programming Language :: Python :: 3.5',
+            'Programming Language :: Python :: 3.6',
+            'Programming Language :: Python :: 3.7',
+            'Programming Language :: Python :: 3.8',
+            'Topic :: Internet',
+            'Topic :: Communications',
+            'Topic :: Software Development :: Libraries',
             'Topic :: Software Development :: Libraries :: Python Modules',
         ],
+        long_description=long_description,
+        long_description_content_type='text/markdown',
     )
