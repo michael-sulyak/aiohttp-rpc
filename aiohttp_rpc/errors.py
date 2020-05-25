@@ -25,7 +25,9 @@ class JsonRpcError(RuntimeError):
         if self.data is None:
             self.data = {}
 
-        self.data['traceback_exception'] = ''.join(traceback_exception.format()).split("\n")
+        if isinstance(self.data, dict):
+            self.data['traceback_exception'] = ''.join(traceback_exception.format()).split("\n")
+
         return self
 
     def __repr__(self) -> str:
@@ -65,11 +67,11 @@ class InternalError(JsonRpcError):
     message = 'Internal JSON-RPC error.'
 
 
-DEFAULT_KNOWN_ERRORS = {
+DEFAULT_KNOWN_ERRORS = frozenset({
     ServerError,
     ParseError,
     InvalidRequest,
     MethodNotFound,
     InvalidParams,
     InternalError,
-}
+})

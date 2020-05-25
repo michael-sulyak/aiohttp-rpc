@@ -4,10 +4,10 @@ import logging
 import typing
 from dataclasses import dataclass
 
-from aiohttp import web
+from aiohttp import ClientResponse, web
 
 from . import constants
-from . import exceptions
+from . import errors
 from . import utils
 
 
@@ -18,6 +18,7 @@ class JsonRpcRequest:
     args: list
     kwargs: dict
     jsonrpc: str
+    extra_args: dict
 
     def __init__(self, *,
                  msg_id: typing.Any,
@@ -31,22 +32,36 @@ class JsonRpcRequest:
         self.method = method
         self.jsonrpc = jsonrpc
         self.http_request = http_request
+        self.extra_args = {'rpc_request': self}
 
         if self.jsonrpc != constants.VERSION_2_0:
-            raise exceptions.InvalidRequest
+            raise errors.InvalidRequest(f'Only version {constants.VERSION_2_0} is supported.')
 
         if params is constants.NOTHING:
             self.params, self.args, self.kwargs = utils.parse_args_and_kwargs(args, kwargs)
         else:
             if args is not None or kwargs is not None:
-                raise exceptions.InvalidParams('Need use params or args with kwargs.')
+                raise errors.InvalidParams('Need use params or args with kwargs.')
 
             self.params = params
             self.args, self.kwargs = utils.convert_params_to_args_and_kwargs(params)
 
+    @classmethod
+    def from_dict(cls, data: dict, **kwargs) -> 'JsonRpcRequest':
+        if 'method' not in data:
+            raise errors.MethodNotFound('Method not in data.')
+
+        return cls(
+            msg_id=data.get('id'),
+            method=data['method'],
+            params=data.get('params', constants.NOTHING),
+            jsonrpc=data.get('jsonrpc', constants.VERSION_2_0),
+            **kwargs,
+        )
+
     def to_dict(self) -> dict:
         data = {
-            'msg_id': self.msg_id,
+            'id': self.msg_id,
             'method': self.method,
             'jsonrpc': self.jsonrpc,
         }
@@ -62,27 +77,29 @@ class JsonRpcResponse:
     jsonrpc: str = constants.VERSION_2_0
     msg_id: typing.Any = None
     result: typing.Any = None
-    error: exceptions.JsonRpcError = None
+    error: typing.Optional[errors.JsonRpcError] = None
+    http_response: typing.Optional[ClientResponse] = None
 
     @classmethod
-    def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None) -> 'JsonRpcResponse':
+    def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcResponse':
         if 'id' not in data:
-            raise exceptions.ParseError(data=data)
+            raise errors.ParseError('"id" not found in data.', data={'data': data})
 
         if 'result' not in data and 'error' not in data:
-            raise exceptions.ParseError(data=data)
+            raise errors.ParseError('"result" or "error" not found in data.', data={'data': data})
 
         rpc_response = cls(
             msg_id=data['id'],
             jsonrpc=data.get('jsonrpc', constants.VERSION_2_0),
             result=data.get('result'),
+            **kwargs,
         )
 
         if 'error' in data:
             if error_map:
-                exception_class = error_map.get(data['error']['code'], exceptions.JsonRpcError)
+                exception_class = error_map.get(data['error']['code'], errors.JsonRpcError)
             else:
-                exception_class = exceptions.JsonRpcError
+                exception_class = errors.JsonRpcError
 
             rpc_response.error = exception_class(
                 message=data['error']['message'],
@@ -107,115 +124,91 @@ class JsonRpcResponse:
 
 
 class JsonRpcMethod:
+    separator: str = '__'
     prefix: str
     name: str
-    method: typing.Callable
+    func: typing.Callable
+    add_extra_args: bool
+    is_coroutine: bool
     supported_args: list
     supported_kwargs: list
-    all_supported_args: set
-    required_args: set
-    required_kwargs: set
-    without_extra_args: bool
-    is_coroutine: bool
-    has_varargs: bool
-    has_varkw: bool
 
     def __init__(self,
                  prefix: str,
-                 method: typing.Callable, *,
+                 func: typing.Callable, *,
                  custom_name: typing.Optional[str] = None,
-                 without_extra_args: bool = False) -> None:
-        assert callable(method)
+                 add_extra_args: bool = True) -> None:
+        assert callable(func)
 
         self.prefix = prefix
-        self.method = method
-        self.without_extra_args = without_extra_args
+        self.func = func
+        self.add_extra_args = add_extra_args
 
-        if custom_name is None:
-            self.name = method.__name__
-        else:
+        if custom_name:
             self.name = custom_name
+        else:
+            self.name = func.__name__
 
         if prefix:
-            self.name = f'{prefix}__{self.name}'
+            self.name = f'{prefix}{self.separator}{self.name}'
 
-        argspec = inspect.getfullargspec(method)
+        argspec = inspect.getfullargspec(func)
 
-        if inspect.ismethod(method):
+        if inspect.ismethod(func):
             self.supported_args = argspec.args[1:]
         else:
             self.supported_args = argspec.args
 
-        self.has_varargs = argspec.varargs is not None
-        self.has_varkw = argspec.varkw is not None
         self.supported_kwargs = argspec.kwonlyargs
-        self.all_supported_args = set(self.supported_args) | set(self.supported_kwargs)
-        self.required_args = set(self.supported_args[len(argspec.defaults or []):])
-        self.required_kwargs = (
-            set(self.supported_kwargs) - set(argspec.kwonlydefaults.keys() if argspec.kwonlydefaults else [])
-        )
-        self.is_coroutine = asyncio.iscoroutinefunction(self.method)
+        self.is_coroutine = asyncio.iscoroutinefunction(self.func)
 
-    async def __call__(self, args: list, kwargs: dict, extra_kwargs: typing.Optional[dict] = None) -> typing.Any:
-        if not self.without_extra_args and extra_kwargs:
-            args, kwargs = self._add_extra_kwargs_in_args_and_kwargs(args, kwargs, extra_kwargs)
+    async def __call__(self, args: list, kwargs: dict, extra_args: typing.Optional[dict] = None) -> typing.Any:
+        if self.add_extra_args and extra_args:
+            args, kwargs = self._add_extra_args_in_args_and_kwargs(args, kwargs, extra_args)
 
-        self._validate_arg_and_kwargs(args, kwargs)
+        try:
+            inspect.signature(self.func).bind(*args, **kwargs)
+        except TypeError as e:
+            raise errors.InvalidParams(utils.exc_message(e)) from e
 
         try:
             if self.is_coroutine:
-                return await self.method(*args, **kwargs)
+                return await self.func(*args, **kwargs)
             else:
-                return self.method(*args, **kwargs)
-        except exceptions.JsonRpcError:
+                return self.func(*args, **kwargs)
+        except errors.JsonRpcError:
             raise
         except Exception as e:
             logging.exception(e)
-            raise exceptions.InternalError().with_traceback() from e
+            raise errors.InternalError(utils.exc_message(e)).with_traceback() from e
 
-    def _add_extra_kwargs_in_args_and_kwargs(self,
-                                             args: list,
-                                             kwargs: dict,
-                                             extra_kwargs: typing.Optional[dict] = None) -> typing.Tuple[list, dict]:
-        extra_kwargs_ = set(extra_kwargs.keys())
+    def _add_extra_args_in_args_and_kwargs(self,
+                                           args: list,
+                                           kwargs: dict,
+                                           extra_args: typing.Optional[dict] = None) -> typing.Tuple[list, dict]:
+        extra_args_ = set(extra_args.keys())
         args_ = []
-        kwargs_ = {}
 
         for supported_arg in self.supported_args:
-            if supported_arg not in extra_kwargs_:
+            if supported_arg not in extra_args_:
                 break
 
-            args_.append(extra_kwargs[supported_arg])
-            extra_kwargs_.remove(supported_arg)
-
-        for extra_kwarg in extra_kwargs_:
-            if extra_kwarg in self.supported_kwargs and extra_kwarg not in kwargs:
-                kwargs_[extra_kwarg] = extra_kwargs[extra_kwarg]
+            args_.append(extra_args[supported_arg])
+            extra_args_.remove(supported_arg)
 
         if args_:
             args = [*args_, *args]
+
+        if not extra_args_:
+            return args, kwargs
+
+        kwargs_ = {}
+
+        for extra_arg in extra_args_:
+            if extra_arg in self.supported_kwargs and extra_arg not in kwargs:
+                kwargs_[extra_arg] = extra_args[extra_arg]
 
         if kwargs_:
             kwargs = {**kwargs, **kwargs_}
 
         return args, kwargs
-
-    def _validate_arg_and_kwargs(self, args: list, kwargs: dict) -> None:
-        kwargs_keys = set(kwargs.keys())
-
-        if self.required_args:
-            required_args = set(self.supported_args) - kwargs_keys
-        else:
-            required_args = self.required_args
-
-        if required_args and len(self.required_args) > len(args):
-            raise exceptions.InvalidParams('Method required more positional arguments.')
-
-        if self.required_kwargs and len(self.required_kwargs - kwargs_keys) > 0:
-            raise exceptions.InvalidParams('Method required more keyword-only arguments.')
-
-        if not self.has_varargs and len(self.supported_args) < len(args):
-            raise exceptions.InvalidParams('Method required less keyword-only arguments.')
-
-        if not self.has_varkw and len(kwargs_keys - self.all_supported_args) > 0:
-            raise exceptions.InvalidParams('Method required less positional arguments.')
