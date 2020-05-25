@@ -2,6 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/aiohttp-rpc.svg?style=flat-square)](https://pypi.org/project/aiohttp-rpc/)
 [![PyPI - Python Version](https://img.shields.io/badge/python-3.5%20%7C%203.6%20%7C%203.7%20%7C%203.8-blue?style=flat-square)](https://docs.python.org/3/whatsnew/3.8.html)
+[![AIOHTTP Version](https://img.shields.io/badge/aiohttp-3-blue?style=flat-square)](https://docs.aiohttp.org/en/stable/)
 [![Scrutinizer Code Quality](https://img.shields.io/scrutinizer/g/expert-m/aiohttp-rpc.svg?style=flat-square)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/?branch=master)
 [![Build Status](https://img.shields.io/scrutinizer/build/g/expert-m/aiohttp-rpc.svg?style=flat-square)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/build-status/master)
 [![GitHub Issues](https://img.shields.io/github/issues/expert-m/aiohttp-rpc.svg?style=flat-square)](https://github.com/expert-m/aiohttp-rpc/issues)
@@ -19,6 +20,7 @@ The motivation is to provide a simple, fast and reliable way to integrate the JS
 - [API Reference](#api-reference)
   - [HTTP Server Example](#http-server-example)
   - [HTTP Client Example](#http-client-example)
+  - [Middleware](#middleware)
 - [License](#license)
 
 ## Installation
@@ -31,6 +33,8 @@ pip install aiohttp-rpc
 # Usage
 
 ### HTTP Server Example
+
+**Example 1**
 ```python3
 import asyncio
 from aiohttp import web
@@ -38,7 +42,7 @@ import aiohttp_rpc
 
 
 @aiohttp_rpc.rpc_method()
-def proxy(*args, **kwargs):
+def echo(*args, **kwargs):
     return {
         'args': args,
         'kwargs': kwargs,
@@ -49,18 +53,45 @@ async def ping(rpc_request):
 
 
 if __name__ == '__main__':
-    aiohttp_rpc.default_rpc_server.add_methods([
+    aiohttp_rpc.rpc_server.add_methods([
         ('', ping,),
     ])
 
     app = web.Application()
     app.router.add_routes((
-        web.post('/rpc', aiohttp_rpc.default_rpc_server.handle_request),
+        web.post('/rpc', aiohttp_rpc.rpc_server.handle_request),
     ))
 
     web.run_app(app, host='0.0.0.0', port=8080)
 ```
 
+**Examples of adding methods:**
+```python3
+import aiohttp_rpc
+
+async def ping(rpc_request): return 'pong'
+async def ping_1(rpc_request): return 'pong 1'
+async def ping_2(rpc_request): return 'pong 2'
+async def ping_3(rpc_request): return 'pong 3'
+
+rpc_server = aiohttp_rpc.JsonRpcServer()
+rpc_server.add_method(ping)  # 'ping'
+rpc_server.add_method(['', ping_1])  # 'ping_1'
+rpc_server.add_method(['super', ping_1])  # 'super__ping_1'
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('super', ping_2))  # 'super__ping_2'
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', ping_2, custom_name='super_ping'))  # 'super__super_ping'
+
+# Replace method
+rpc_server.add_method(['', ping_1], replace=True)  # 'ping_1'
+
+
+rpc_server.add_methods([ping_1, ping_2], replace=True)  # 'ping_1', 'ping_2'
+rpc_server.add_methods([['new', ping_2], ping_3])  # 'new__ping2', 'ping_3'
+```
+
+[back to top](#table-of-contents)
+
+---
 
 ### HTTP Client Example
 ```python3
@@ -70,13 +101,13 @@ import asyncio
 async def run():
     async with aiohttp_rpc.JsonRpcClient('http://0.0.0.0:8080/rpc') as rpc:
         print(await rpc.ping())
-        print(await rpc.proxy(a=4, b=6))
-        print(await rpc.call('proxy', a=4, b=6))
-        print(await rpc.proxy(1, 2, 3))
+        print(await rpc.echo(a=4, b=6))
+        print(await rpc.call('echo', a=4, b=6))
+        print(await rpc.echo(1, 2, 3))
         print(await rpc.batch([
-            ('proxy', 2,), 
-            'proxy2',
-            'hi',
+            ['echo', 2], 
+            'echo2',
+            'ping',
         ]))
 
 loop = asyncio.get_event_loop()
@@ -86,6 +117,32 @@ loop.run_until_complete(run())
 [back to top](#table-of-contents)
 
 ---
+
+
+### Middleware
+
+Middleware is used for request/response processing. 
+
+```python3
+import aiohttp_rpc
+
+class TokenMiddleware(aiohttp_rpc.BaseJsonRpcMiddleware):
+    async def __call__(self, request: aiohttp_rpc.JsonRpcRequest) -> aiohttp_rpc.JsonRpcResponse:
+        if request.http_request and request.http_request.headers.get('X-App-Token') != 'qwerty':
+            return protocol.JsonRpcResponse(error=exceptions.InvalidRequest('Invalid token'))
+
+        return await self.get_response(request)
+
+rpc_server = aiohttp_rpc.JsonRpcServer(middleware=[
+     TokenMiddleware,
+     aiohttp_rpc.ExceptionMiddleware,
+])
+```
+
+[back to top](#table-of-contents)
+
+---
+
 
 ## License
 MIT
