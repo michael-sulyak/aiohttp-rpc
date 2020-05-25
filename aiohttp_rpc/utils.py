@@ -1,7 +1,9 @@
+import json
 import typing
+from functools import partial
 from traceback import format_exception_only
 
-from . import constants, exceptions
+from . import constants, errors
 
 
 def convert_params_to_args_and_kwargs(params: typing.Any) -> typing.Tuple[list, dict]:
@@ -32,7 +34,7 @@ def parse_args_and_kwargs(args: typing.Any, kwargs: typing.Any) -> typing.Tuple:
         return params, args, kwargs
 
     if not (has_args ^ has_kwargs):
-        raise exceptions.InvalidParams('Need use args or kwargs.')
+        raise errors.InvalidParams('Need use args or kwargs.')
 
     if has_args:
         args = list(args)
@@ -48,3 +50,6 @@ def parse_args_and_kwargs(args: typing.Any, kwargs: typing.Any) -> typing.Tuple:
 
 def exc_message(exp: Exception) -> str:
     return ''.join(format_exception_only(exp.__class__, exp)).strip()
+
+
+json_serialize = partial(json.dumps, default=lambda x: repr(x))
