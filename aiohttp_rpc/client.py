@@ -1,45 +1,44 @@
-import json
+import types
 import typing
 import uuid
 from functools import partial
 
 import aiohttp
+from aiohttp import ClientResponse
 
-from . import exceptions
+from . import errors, utils
 from .protocol import JsonRpcRequest, JsonRpcResponse
 
 
 class JsonRpcClient:
-    _json_serializer = partial(json.dumps, default=lambda x: repr(x))
-    _session: typing.Optional[aiohttp.ClientSession] = None
+    url: str
+    session: typing.Optional[aiohttp.ClientSession]
+    _json_serialize: typing.Callable
     _is_outer_session: bool
-    _url: str = None
-    _error_map: typing.Dict[int, exceptions.JsonRpcError] = {
+    _error_map: typing.Dict[int, errors.JsonRpcError] = {
         error.code: error
-        for error in exceptions.DEFAULT_KNOWN_ERRORS
+        for error in errors.DEFAULT_KNOWN_ERRORS
     }
 
     def __init__(self,
                  url: str, *,
                  session: typing.Optional[aiohttp.ClientSession] = None,
                  known_errors: typing.Optional[typing.Iterable] = None,
-                 json_serializer: typing.Any = None) -> None:
-        self._url = url
-        self._session = session
-        self._is_outer_session = bool(session)
+                 json_serialize: typing.Callable = utils.json_serialize) -> None:
+        self.url = url
+        self.session = session
+        self._is_outer_session = session is not None
+        self._json_serialize = json_serialize
 
         if known_errors is not None:
             self._error_map = {error.code: error for error in known_errors}
-
-        if json_serializer is not None:
-            self._json_serializer = json_serializer
 
     def __getattr__(self, method) -> typing.Callable:
         return partial(self.call, method)
 
     async def call(self, method: str, *args, **kwargs) -> typing.Any:
         rpc_request = JsonRpcRequest(msg_id=str(uuid.uuid4()), method=method, args=args, kwargs=kwargs)
-        rpc_response = await self.raw_call(rpc_request)
+        rpc_response = await self.direct_call(rpc_request)
 
         if rpc_response.error:
             raise rpc_response.error
@@ -47,7 +46,7 @@ class JsonRpcClient:
         return rpc_response.result
 
     async def batch(self, methods: typing.Iterable) -> typing.Any:
-        messages = []
+        rpc_requests = []
 
         for method in methods:
             msg_id = str(uuid.uuid4())
@@ -61,40 +60,45 @@ class JsonRpcClient:
             elif len(method) == 3:
                 rpc_request = JsonRpcRequest(msg_id=msg_id, method=method[0], args=method[1], kwargs=method[2])
             else:
-                raise exceptions.InvalidParams
+                raise errors.InvalidParams('Use string or list (length less than or equal to 3).')
 
-            messages.append(rpc_request.to_dict())
+            rpc_requests.append(rpc_request)
 
-        raw_response = await self.send_raw_data(messages)
-        raw_rpc_responses = await raw_response.json()
+        rpc_responses = await self.direct_batch(rpc_requests)
 
-        result = []
+        return [
+            rpc_response.error if rpc_response.error else rpc_response.result
+            for rpc_response in rpc_responses
+        ]
 
-        for raw_rpc_response in raw_rpc_responses:
-            rpc_response = JsonRpcResponse.from_dict(raw_rpc_response, error_map=self._error_map)
-
-            if rpc_response.error:
-                result.append(rpc_response.error)
-            else:
-                result.append(rpc_response.result)
-
-        return result
-
-    async def raw_call(self, rpc_request: JsonRpcRequest) -> JsonRpcResponse:
-        raw_response = await self.send_raw_data(rpc_request.to_dict())
-        data = await raw_response.json()
-        rpc_response = JsonRpcResponse.from_dict(data, error_map=self._error_map)
+    async def direct_call(self, rpc_request: JsonRpcRequest) -> JsonRpcResponse:
+        http_response, json_response = await self.send_json(rpc_request.to_dict())
+        rpc_response = JsonRpcResponse.from_dict(json_response, error_map=self._error_map, http_response=http_response)
         return rpc_response
 
-    async def send_raw_data(self, data: typing.Any) -> typing.Any:
-        return await self._session.post(self._url, json=data)
+    async def direct_batch(self, rpc_requests: typing.List[JsonRpcRequest]) -> typing.List[JsonRpcResponse]:
+        data = [rpc_request.to_dict() for rpc_request in rpc_requests]
+        http_response, json_response = await self.send_json(data)
+
+        return [
+            JsonRpcResponse.from_dict(item, error_map=self._error_map, http_response=http_response)
+            for item in json_response
+        ]
+
+    async def send_json(self, data: typing.Union[typing.List[dict], dict]) -> typing.Tuple[ClientResponse, typing.Any]:
+        http_response = await self.session.post(self.url, json=data)
+        json_response = await http_response.json()
+        return http_response, json_response
 
     async def __aenter__(self) -> 'JsonRpcClient':
-        if not self._session:
-            self._session = aiohttp.ClientSession(json_serialize=self._json_serializer)
+        if not self.session:
+            self.session = aiohttp.ClientSession(json_serialize=self._json_serialize)
 
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(self,
+                        exc_type: typing.Optional[typing.Type[BaseException]],
+                        exc_value: typing.Optional[BaseException],
+                        traceback: typing.Optional[types.TracebackType]) -> None:
         if not self._is_outer_session:
-            await self._session.close()
+            await self.session.close()
