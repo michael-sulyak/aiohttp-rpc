@@ -6,6 +6,7 @@ checks:
 build:
   dependencies:
     before:
+      - pip install importlib-resources
       - pip install poetry==1.0.5
       - poetry config virtualenvs.create false
       - poetry install
@@ -16,6 +17,10 @@ build:
 
   nodes:
     py36:
+      dependencies:
+        before:
+          - pip install importlib-resources
+
       environment:
         python: 3.6.0
 
