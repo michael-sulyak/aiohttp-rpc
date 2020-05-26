@@ -1,9 +1,9 @@
 import abc
 import logging
-
 import typing
 
 from . import errors, protocol
+
 
 if typing.TYPE_CHECKING:
     from . import server as rpc_server
@@ -47,3 +47,8 @@ class ExceptionMiddleware(BaseJsonRpcMiddleware):
             )
 
         return response
+
+
+DEFAULT_MIDDLEWARES = (
+    ExceptionMiddleware,
+)
