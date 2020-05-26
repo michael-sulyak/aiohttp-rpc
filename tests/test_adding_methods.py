@@ -8,6 +8,18 @@ async def test_adding_method():
     def method():
         pass
 
+    class TestClass:
+        def method_1(self):
+            pass
+
+        @classmethod
+        def method_2(cls):
+            pass
+
+        @staticmethod
+        def method_3():
+            pass
+
     rpc_server = aiohttp_rpc.JsonRpcServer()
 
     rpc_server.add_method(method)
@@ -24,6 +36,16 @@ async def test_adding_method():
 
     rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('test', method, custom_name='test'))
     assert rpc_server.methods['test__test'].func == method
+
+    test_class = TestClass()
+    rpc_server.add_method(test_class.method_1)
+    assert rpc_server.methods['method_1'].func == test_class.method_1
+
+    rpc_server.add_method(TestClass.method_2)
+    assert rpc_server.methods['method_2'].func == TestClass.method_2
+
+    rpc_server.add_method(TestClass.method_3)
+    assert rpc_server.methods['method_3'].func == TestClass.method_3
 
 
 @pytest.mark.asyncio
