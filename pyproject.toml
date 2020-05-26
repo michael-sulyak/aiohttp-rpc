@@ -5,7 +5,7 @@ description = ""
 authors = ["expert-m <michael@sulyak.info>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.6"
 aiohttp = "^3.6.2"
 
 [tool.poetry.dev-dependencies]
