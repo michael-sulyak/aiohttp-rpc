@@ -1,10 +1,7 @@
 import asyncio
 import inspect
-import logging
 import typing
-from dataclasses import dataclass
-
-from aiohttp import ClientResponse, web
+from dataclasses import dataclass, field
 
 from . import constants
 from . import errors
@@ -182,44 +179,36 @@ class JsonRpcMethod:
         except TypeError as e:
             raise errors.InvalidParams(utils.exc_message(e)) from e
 
-        try:
-            if self.is_coroutine:
-                return await self.func(*args, **kwargs)
-            else:
-                return self.func(*args, **kwargs)
-        except errors.JsonRpcError:
-            raise
-        except Exception as e:
-            logging.exception(e)
-            raise errors.InternalError(utils.exc_message(e)).with_traceback() from e
+        if self.is_coroutine:
+            return await self.func(*args, **kwargs)
+
+        return self.func(*args, **kwargs)
 
     def _add_extra_args_in_args_and_kwargs(self,
                                            args: list,
                                            kwargs: dict,
                                            extra_args: typing.Optional[dict] = None) -> typing.Tuple[list, dict]:
-        extra_args_ = set(extra_args.keys())
-        args_ = []
+        new_args = []
 
         for supported_arg in self.supported_args:
-            if supported_arg not in extra_args_:
+            if supported_arg not in extra_args:
                 break
 
-            args_.append(extra_args[supported_arg])
-            extra_args_.remove(supported_arg)
+            new_args.append(extra_args[supported_arg])
 
-        if args_:
-            args = [*args_, *args]
+        if new_args:
+            args = [*new_args, *args]
 
-        if not extra_args_:
+        if len(new_args) == len(extra_args):
             return args, kwargs
 
-        kwargs_ = {}
+        new_kwargs = {}
 
-        for extra_arg in extra_args_:
-            if extra_arg in self.supported_kwargs and extra_arg not in kwargs:
-                kwargs_[extra_arg] = extra_args[extra_arg]
+        for extra_arg, value in extra_args.items():
+            if extra_arg in self.supported_kwargs:
+                new_kwargs[extra_arg] = value
 
-        if kwargs_:
-            kwargs = {**kwargs, **kwargs_}
+        if new_kwargs:
+            kwargs = {**kwargs, **new_kwargs}
 
         return args, kwargs
