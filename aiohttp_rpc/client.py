@@ -4,7 +4,6 @@ import uuid
 from functools import partial
 
 import aiohttp
-from aiohttp import ClientResponse
 
 from . import errors, utils
 from .protocol import JsonRpcRequest, JsonRpcResponse
@@ -50,23 +49,11 @@ class JsonRpcClient:
 
         return rpc_response.result
 
-    async def batch(self, methods: typing.Iterable) -> typing.Any:
+    async def batch(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> typing.Any:
         rpc_requests = []
 
         for method in methods:
-            msg_id = str(uuid.uuid4())
-
-            if isinstance(method, str):
-                rpc_request = JsonRpcRequest(msg_id=msg_id, method=method)
-            elif len(method) == 1:
-                rpc_request = JsonRpcRequest(msg_id=msg_id, method=method[0])
-            elif len(method) == 2:
-                rpc_request = JsonRpcRequest(msg_id=msg_id, method=method[0], params=method[1])
-            elif len(method) == 3:
-                rpc_request = JsonRpcRequest(msg_id=msg_id, method=method[0], args=method[1], kwargs=method[2])
-            else:
-                raise errors.InvalidParams('Use string or list (length less than or equal to 3).')
-
+            rpc_request = self._parse_batch_method(method)
             rpc_requests.append(rpc_request)
 
         rpc_responses = await self.direct_batch(rpc_requests)
@@ -78,7 +65,11 @@ class JsonRpcClient:
 
     async def direct_call(self, rpc_request: JsonRpcRequest) -> JsonRpcResponse:
         http_response, json_response = await self.send_json(rpc_request.to_dict())
-        rpc_response = JsonRpcResponse.from_dict(json_response, error_map=self._error_map, http_response=http_response)
+        rpc_response = JsonRpcResponse.from_dict(
+            json_response,
+            error_map=self._error_map,
+            context={'http_response': http_response},
+        )
         return rpc_response
 
     async def direct_batch(self, rpc_requests: typing.List[JsonRpcRequest]) -> typing.List[JsonRpcResponse]:
@@ -86,11 +77,11 @@ class JsonRpcClient:
         http_response, json_response = await self.send_json(data)
 
         return [
-            JsonRpcResponse.from_dict(item, error_map=self._error_map, http_response=http_response)
+            JsonRpcResponse.from_dict(item, error_map=self._error_map, context={'http_response': http_response})
             for item in json_response
         ]
 
-    async def send_json(self, data: typing.Union[typing.List[dict], dict]) -> typing.Tuple[ClientResponse, typing.Any]:
+    async def send_json(self, data: typing.Any) -> typing.Tuple[aiohttp.ClientResponse, typing.Any]:
         http_response = await self.session.post(self.url, json=data)
         json_response = await http_response.json()
         return http_response, json_response
@@ -107,3 +98,21 @@ class JsonRpcClient:
                         traceback: typing.Optional[types.TracebackType]) -> None:
         if not self._is_outer_session:
             await self.session.close()
+
+    @staticmethod
+    def _parse_batch_method(batch_method: typing.Union[str, list, tuple]) -> JsonRpcRequest:
+        msg_id = str(uuid.uuid4())
+
+        if isinstance(batch_method, str):
+            return JsonRpcRequest(msg_id=msg_id, method=batch_method)
+
+        if len(batch_method) == 1:
+            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0])
+
+        if len(batch_method) == 2:
+            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0], params=batch_method[1])
+
+        if len(batch_method) == 3:
+            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0], args=batch_method[1], kwargs=batch_method[2])
+
+        raise errors.InvalidParams('Use string or list (length less than or equal to 3).')
