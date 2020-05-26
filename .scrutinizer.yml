@@ -4,9 +4,6 @@ checks:
         duplicate_code: true
 
 build:
-  environment:
-    python: 3.8.0
-
   dependencies:
     before:
       - pip install poetry==1.0.5
@@ -16,4 +13,21 @@ build:
   tests:
     override:
       - tox
-      - py-scrutinizer-run
+
+  nodes:
+    py36:
+      environment:
+        python: 3.6.0
+
+    py37:
+      environment:
+        python: 3.7.2
+
+    py38:
+      environment:
+        python: 3.8.0
+
+      tests:
+        override:
+          - tox
+          - py-scrutinizer-run
