@@ -10,6 +10,11 @@ from . import errors, utils
 from .protocol import JsonRpcRequest, JsonRpcResponse
 
 
+__all__ = (
+    'JsonRpcClient',
+)
+
+
 class JsonRpcClient:
     url: str
     session: typing.Optional[aiohttp.ClientSession]

@@ -3,6 +3,18 @@ import traceback
 import typing
 
 
+__all__ = (
+    'JsonRpcError',
+    'ServerError',
+    'ParseError',
+    'InvalidRequest',
+    'MethodNotFound',
+    'InvalidParams',
+    'InternalError',
+    'DEFAULT_KNOWN_ERRORS',
+)
+
+
 class JsonRpcError(RuntimeError):
     code: typing.Optional[int] = None
     message: typing.Optional[str] = None

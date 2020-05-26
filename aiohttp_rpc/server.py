@@ -3,7 +3,13 @@ import typing
 
 from aiohttp import web
 
-from . import errors, middleware as rpc_middleware, protocol, utils
+from . import errors, middlewares as rpc_middleware, protocol, utils
+
+
+__all__ = (
+    'JsonRpcServer',
+    'rpc_server',
+)
 
 
 class JsonRpcServer:

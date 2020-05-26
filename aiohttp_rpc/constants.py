@@ -1,3 +1,9 @@
+__all__ = (
+    'NOTHING',
+    'VERSION_2_0',
+)
+
+
 class NOTHING:
     pass
 

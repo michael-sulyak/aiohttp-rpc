@@ -8,6 +8,12 @@ from . import errors, protocol
 if typing.TYPE_CHECKING:
     from . import server as rpc_server
 
+__all__ = (
+    'BaseJsonRpcMiddleware',
+    'ExceptionMiddleware',
+    'DEFAULT_MIDDLEWARES',
+)
+
 
 class BaseJsonRpcMiddleware(abc.ABC):
     server: 'rpc_server.JsonRpcServer'
