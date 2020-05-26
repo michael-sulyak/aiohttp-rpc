@@ -26,6 +26,7 @@ class JsonRpcRequest:
     kwargs: dict
     jsonrpc: str
     extra_args: dict
+    context: dict
 
     def __init__(self, *,
                  msg_id: typing.Any,
@@ -34,22 +35,25 @@ class JsonRpcRequest:
                  params: typing.Any = constants.NOTHING,
                  args: typing.Any = None,
                  kwargs: typing.Any = None,
-                 http_request: typing.Optional[web.Request] = None) -> None:
+                 context: typing.Optional[dict] = None) -> None:
+        if jsonrpc != constants.VERSION_2_0:
+            raise errors.InvalidRequest(f'Only version {constants.VERSION_2_0} is supported.')
+
+        if params is not constants.NOTHING and (args is not None or kwargs is not None):
+            raise errors.InvalidParams('Need use params or args with kwargs.')
+
+        if context is None:
+            context = {}
+
         self.msg_id = msg_id
         self.method = method
         self.jsonrpc = jsonrpc
-        self.http_request = http_request
         self.extra_args = {'rpc_request': self}
-
-        if self.jsonrpc != constants.VERSION_2_0:
-            raise errors.InvalidRequest(f'Only version {constants.VERSION_2_0} is supported.')
+        self.context = context
 
         if params is constants.NOTHING:
             self.params, self.args, self.kwargs = utils.parse_args_and_kwargs(args, kwargs)
         else:
-            if args is not None or kwargs is not None:
-                raise errors.InvalidParams('Need use params or args with kwargs.')
-
             self.params = params
             self.args, self.kwargs = utils.convert_params_to_args_and_kwargs(params)
 
@@ -85,7 +89,7 @@ class JsonRpcResponse:
     msg_id: typing.Any = None
     result: typing.Any = None
     error: typing.Optional[errors.JsonRpcError] = None
-    http_response: typing.Optional[ClientResponse] = None
+    context: dict = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcResponse':
