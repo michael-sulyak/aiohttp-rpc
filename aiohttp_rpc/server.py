@@ -14,29 +14,28 @@ __all__ = (
 
 class JsonRpcServer:
     methods: typing.Dict[str, protocol.JsonRpcMethod]
-    middleware: typing.Tuple[typing.Type[rpc_middleware.BaseJsonRpcMiddleware], ...]
+    middlewares: typing.Tuple[typing.Type[rpc_middleware.BaseJsonRpcMiddleware], ...]
     _json_serialize: typing.Callable
     _middleware_chain: typing.Callable
 
     def __init__(self, *,
                  json_serialize: typing.Callable = utils.json_serialize,
-                 middleware: typing.Optional[typing.Iterable] = None) -> None:
-        self.methods = {'get_methods': protocol.JsonRpcMethod('', self.get_methods)}
-        self._json_serialize = json_serialize
+                 middlewares: typing.Iterable = (),
+                 methods: typing.Optional[typing.Dict[str, protocol.JsonRpcMethod]] = None) -> None:
+        if methods is None:
+            methods = {'get_methods': protocol.JsonRpcMethod('', self.get_methods)}
 
-        if middleware is None:
-            self.middleware = (
-                rpc_middleware.ExceptionMiddleware,
-            )
-        else:
-            self.middleware = tuple(middleware)
+        self.methods = methods
 
+        self.middlewares = tuple(middlewares)
         self.load_middleware()
+
+        self._json_serialize = json_serialize
 
     def load_middleware(self):
         self._middleware_chain = self._process_single_rpc_request
 
-        for middleware_class in reversed(self.middleware):
+        for middleware_class in reversed(self.middlewares):
             if isinstance(middleware_class, (list, tuple,)):
                 middleware_class, kwargs = middleware_class
                 self._middleware_chain = middleware_class(server=self, get_response=self._middleware_chain, **kwargs)
@@ -46,11 +45,11 @@ class JsonRpcServer:
 
     def add_method(self,
                    method: typing.Union[protocol.JsonRpcMethod, tuple, list, typing.Callable], *,
-                   replace: bool = False) -> None:
+                   replace: bool = False) -> protocol.JsonRpcMethod:
         if not isinstance(method, protocol.JsonRpcMethod):
             if callable(method):
                 method = protocol.JsonRpcMethod('', method)
-            elif isinstance(method, (tuple, list,)):
+            else:
                 method = protocol.JsonRpcMethod(*method)
 
         if not replace and method.name in self.methods:
@@ -58,11 +57,15 @@ class JsonRpcServer:
 
         self.methods[method.name] = method
 
+        return method
+
     def add_methods(self,
                     methods: typing.Iterable[typing.Union[protocol.JsonRpcMethod, tuple, list, typing.Callable]], *,
-                    replace: bool = False) -> None:
-        for method in methods:
+                    replace: bool = False) -> typing.List[protocol.JsonRpcMethod]:
+        return [
             self.add_method(method, replace=replace)
+            for method in methods
+        ]
 
     async def call(self,
                    method: str, *,
@@ -110,8 +113,10 @@ class JsonRpcServer:
 
             for raw_rcp_request in data:
                 if isinstance(raw_rcp_request, dict):
-                    result.append(
-                        await self._process_single_raw_rpc_request(raw_rcp_request, http_request=http_request))
+                    result.append(await self._process_single_raw_rpc_request(
+                        raw_rcp_request,
+                        http_request=http_request,
+                    ))
                 else:
                     rpc_response = protocol.JsonRpcResponse(
                         error=errors.ParseError('Data must be a dict or an list.'),
@@ -131,7 +136,7 @@ class JsonRpcServer:
         msg_id = raw_rcp_request.get('id')
 
         try:
-            rpc_request = protocol.JsonRpcRequest.from_dict(raw_rcp_request, http_request=http_request)
+            rpc_request = protocol.JsonRpcRequest.from_dict(raw_rcp_request, context={'http_request': http_request})
         except errors.JsonRpcError as e:
             rpc_response = protocol.JsonRpcResponse(msg_id=msg_id, error=e)
             return rpc_response.to_dict()
@@ -162,4 +167,6 @@ class JsonRpcServer:
         return rpc_response
 
 
-rpc_server = JsonRpcServer()
+rpc_server = JsonRpcServer(
+    middlewares=rpc_middleware.DEFAULT_MIDDLEWARES,
+)
