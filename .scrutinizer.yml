@@ -21,7 +21,6 @@ build:
       dependencies:
         before:
           - pip install "setuptools>=43.0.0"
-          - pip install dataclasses
           - pip install importlib-resources
           - pip install poetry==1.0.5
           - poetry config virtualenvs.create false
