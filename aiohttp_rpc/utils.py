@@ -45,13 +45,13 @@ def parse_args_and_kwargs(args: typing.Any, kwargs: typing.Any) -> typing.Tuple:
         raise errors.InvalidParams('Need use args or kwargs.')
 
     if has_args:
+        kwargs = {}
         args = list(args)
         params = args
-        kwargs = {}
-    elif has_kwargs:
+    else:
+        args = []
         kwargs = dict(kwargs)
         params = kwargs
-        args = []
 
     return params, args, kwargs
 
