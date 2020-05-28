@@ -1,3 +1,3 @@
 from .base import *
 from .http import *
-from .ws import *
+from .websocket import *
