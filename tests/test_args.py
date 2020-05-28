@@ -102,7 +102,7 @@ async def test_extra_kwargs(aiohttp_client):
     def method_2(*, rpc_request):
         return rpc_request.__class__.__name__
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.ExtraArgsMiddleware,))
     rpc_server.add_method(method)
     rpc_server.add_method(method_2)
 
