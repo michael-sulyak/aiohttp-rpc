@@ -18,7 +18,7 @@ def convert_params_to_args_and_kwargs(params: typing.Any) -> typing.Tuple[list, 
     if params is constants.NOTHING:
         return [], {}
 
-    if isinstance(params, (str, int, float, bool,)) or params is None:
+    if isinstance(params, constants.JSON_PRIMITIVE_TYPES):
         return [params], {}
 
     if isinstance(params, list):
