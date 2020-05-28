@@ -56,27 +56,7 @@ class BaseJsonRpcClient(abc.ABC):
     async def batch(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> typing.Any:
         requests = [self._parse_batch_method(method) for method in methods]
         responses = await self.direct_batch(requests)
-        unlinked_results = UnlinkedResults(data=[])
-        responses_map = {}
-
-        for response in responses:
-            if response.msg_id is None or response.msg_id is constants.NOTHING:
-                unlinked_results.data.append(response.error or response.result)
-                continue
-
-            responses_map[response.msg_id] = response.error or response.result
-
-        unlinked_results = unlinked_results.compile()
-        result = []
-
-        for request in requests:
-            if request.msg_id is None or request.msg_id is constants.NOTHING:
-                result.append(unlinked_results)
-                continue
-
-            result.append(responses_map.get(request.msg_id, unlinked_results))
-
-        return result
+        return self._collect_batch_result(requests, responses)
 
     async def batch_notify(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> None:
         requests = [self._parse_batch_method(method, is_notification=True) for method in methods]
@@ -109,6 +89,32 @@ class BaseJsonRpcClient(abc.ABC):
 
     def __getattr__(self, method) -> typing.Callable:
         return partial(self.call, method)
+
+    @staticmethod
+    def _collect_batch_result(requests: typing.List[JsonRpcRequest], responses: typing.List[JsonRpcResponse]) -> list:
+        unlinked_results = UnlinkedResults(data=[])
+        responses_map = {}
+
+        for response in responses:
+            value = response.error or response.result
+
+            if response.msg_id in constants.EMPTY_VALUES:
+                unlinked_results.data.append(value)
+                continue
+
+            responses_map[response.msg_id] = value
+
+        unlinked_results = unlinked_results.compile()
+        result = []
+
+        for request in requests:
+            if request.msg_id in constants.EMPTY_VALUES:
+                result.append(unlinked_results)
+                continue
+
+            result.append(responses_map.get(request.msg_id, unlinked_results))
+
+        return result
 
     @staticmethod
     def _parse_batch_method(batch_method: typing.Union[str, list, tuple], *,
