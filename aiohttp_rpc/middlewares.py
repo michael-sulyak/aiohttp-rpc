@@ -14,6 +14,8 @@ __all__ = (
     'DEFAULT_MIDDLEWARES',
 )
 
+logger = logging.getLogger(__name__)
+
 
 class BaseJsonRpcMiddleware(abc.ABC):
     server: 'rpc_server.JsonRpcServer'
@@ -38,8 +40,15 @@ class ExceptionMiddleware(BaseJsonRpcMiddleware):
     async def __call__(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
         try:
             response = await self.get_response(request)
+        except errors.JsonRpcError as e:
+            logging.warning('Unprocessed errors.JsonRpcError', exc_info=True)
+            response = protocol.JsonRpcResponse(
+                msg_id=request.msg_id,
+                jsonrpc=request.jsonrpc,
+                error=e,
+            )
         except Exception as e:
-            logging.exception(e)
+            logger.exception(e)
             response = protocol.JsonRpcResponse(
                 msg_id=request.msg_id,
                 jsonrpc=request.jsonrpc,
@@ -49,6 +58,13 @@ class ExceptionMiddleware(BaseJsonRpcMiddleware):
         return response
 
 
+class ExtraArgsMiddleware(BaseJsonRpcMiddleware):
+    async def __call__(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
+        request.extra_args['rpc_request'] = request
+        return await self.get_response(request)
+
+
 DEFAULT_MIDDLEWARES = (
     ExceptionMiddleware,
+    ExtraArgsMiddleware,
 )

@@ -1,21 +1,26 @@
+import abc
+import asyncio
 import json
 import typing
 
-from aiohttp import web
+import aiohttp
+from aiohttp import web, web_ws
 
-from . import errors, middlewares as rpc_middleware, protocol, utils
+from . import constants, errors, middlewares as rpc_middleware, protocol, utils
 
 
 __all__ = (
+    'BaseJsonRpcServer',
     'JsonRpcServer',
+    'WsJsonRpcServer',
     'rpc_server',
 )
 
 
-class JsonRpcServer:
+class BaseJsonRpcServer(abc.ABC):
     methods: typing.Dict[str, protocol.JsonRpcMethod]
     middlewares: typing.Tuple[typing.Type[rpc_middleware.BaseJsonRpcMiddleware], ...]
-    _json_serialize: typing.Callable
+    json_serialize: typing.Callable
     _middleware_chain: typing.Callable
 
     def __init__(self, *,
@@ -28,12 +33,12 @@ class JsonRpcServer:
         self.methods = methods
 
         self.middlewares = tuple(middlewares)
-        self.load_middleware()
+        self.load_middlewares()
 
-        self._json_serialize = json_serialize
+        self.json_serialize = json_serialize
 
-    def load_middleware(self):
-        self._middleware_chain = self._process_single_rpc_request
+    def load_middlewares(self):
+        self._middleware_chain = self._process_single_request
 
         for middleware_class in reversed(self.middlewares):
             if isinstance(middleware_class, (list, tuple,)):
@@ -83,21 +88,7 @@ class JsonRpcServer:
 
         return await self.methods[method](args=args, kwargs=kwargs, extra_args=extra_args)
 
-    async def handle_request(self, request: web.Request) -> web.Response:
-        if request.method != 'POST':
-            return web.HTTPMethodNotAllowed(method=request.method, allowed_methods=('POST',))
-
-        try:
-            input_data = await request.json()
-        except json.JSONDecodeError as e:
-            rpc_response = protocol.JsonRpcResponse(error=errors.ParseError(utils.exc_message(e)))
-            return web.json_response(rpc_response.to_dict(), dumps=self._json_serialize)
-
-        output_data = await self._process_input_data(input_data, http_request=request)
-
-        return web.json_response(output_data, dumps=self._json_serialize)
-
-    async def get_methods(self) -> dict:
+    def get_methods(self) -> dict:
         return {
             name: {
                 'doc': method.func.__doc__,
@@ -107,64 +98,121 @@ class JsonRpcServer:
             for name, method in self.methods.items()
         }
 
-    async def _process_input_data(self, data: dict, *, http_request: typing.Optional[web.Request] = None) -> typing.Any:
+    async def _process_input_data(self,
+                                  data: typing.Union[dict, list], *,
+                                  http_request: typing.Optional[web.Request] = None) -> typing.Any:
         if isinstance(data, list):
-            result = []
+            json_responses = await asyncio.gather(*(
+                self._process_single_json_request(raw_rcp_request, http_request=http_request)
+                for raw_rcp_request in data
+            ), return_exceptions=True)
 
-            for raw_rcp_request in data:
-                if isinstance(raw_rcp_request, dict):
-                    result.append(await self._process_single_raw_rpc_request(
-                        raw_rcp_request,
-                        http_request=http_request,
-                    ))
-                else:
-                    rpc_response = protocol.JsonRpcResponse(
-                        error=errors.ParseError('Data must be a dict or an list.'),
+            for i, json_response in enumerate(json_responses):
+                if isinstance(json_response, errors.JsonRpcError):
+                    json_responses[i] = protocol.JsonRpcResponse(error=json_response)
+                elif isinstance(json_response, Exception):
+                    json_responses[i] = protocol.JsonRpcResponse(
+                        error=errors.JsonRpcError(utils.get_exc_message(json_response)),
                     )
-                    result.append(rpc_response.to_dict())
 
-            return result
-        elif isinstance(data, dict):
-            return await self._process_single_raw_rpc_request(data, http_request=http_request)
-        else:
-            rpc_response = protocol.JsonRpcResponse(error=errors.ParseError('Data must be a dict or an list.'))
-            return rpc_response.to_dict()
+            return json_responses
 
-    async def _process_single_raw_rpc_request(self,
-                                              raw_rcp_request: dict, *,
-                                              http_request: typing.Optional[web.Request] = None) -> dict:
-        msg_id = raw_rcp_request.get('id')
+        if isinstance(data, dict):
+            return await self._process_single_json_request(data, http_request=http_request)
+
+        response = protocol.JsonRpcResponse(error=errors.ParseError('Data must be a dict or an list.'))
+        return response.to_dict()
+
+    async def _process_single_json_request(self,
+                                           json_request: dict, *,
+                                           http_request: typing.Optional[web.Request] = None) -> dict:
+        if not isinstance(json_request, dict):
+            raise errors.ParseError('Data must be a dict or an list.')
+
+        msg_id = json_request.get('id')
 
         try:
-            rpc_request = protocol.JsonRpcRequest.from_dict(raw_rcp_request, context={'http_request': http_request})
+            request = protocol.JsonRpcRequest.from_dict(json_request, context={'http_request': http_request})
         except errors.JsonRpcError as e:
-            rpc_response = protocol.JsonRpcResponse(msg_id=msg_id, error=e)
-            return rpc_response.to_dict()
+            response = protocol.JsonRpcResponse(msg_id=msg_id, error=e)
+            return response.to_dict()
 
-        rpc_response = await self._middleware_chain(rpc_request)
-        return rpc_response.to_dict()
+        response = await self._middleware_chain(request)
+        return response.to_dict()
 
-    async def _process_single_rpc_request(self, rpc_request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
-        result, error = None, None
+    async def _process_single_request(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
+        result, error = constants.NOTHING, constants.NOTHING
 
         try:
             result = await self.call(
-                rpc_request.method,
-                args=rpc_request.args,
-                kwargs=rpc_request.kwargs,
-                extra_args=rpc_request.extra_args,
+                request.method,
+                args=request.args,
+                kwargs=request.kwargs,
+                extra_args=request.extra_args,
             )
         except errors.JsonRpcError as e:
             error = e
 
-        rpc_response = protocol.JsonRpcResponse(
-            msg_id=rpc_request.msg_id,
-            jsonrpc=rpc_request.jsonrpc,
+        response = protocol.JsonRpcResponse(
+            msg_id=request.msg_id,
+            jsonrpc=request.jsonrpc,
             result=result,
             error=error,
         )
 
-        return rpc_response
+        return response
+
+
+class JsonRpcServer(BaseJsonRpcServer):
+    async def handle_http_request(self, http_request: web.Request) -> web.Response:
+        if http_request.method != 'POST':
+            return web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('POST',))
+
+        try:
+            input_data = await http_request.json()
+        except json.JSONDecodeError as e:
+            response = protocol.JsonRpcResponse(error=errors.ParseError(utils.get_exc_message(e)))
+            return web.json_response(response.to_dict(), dumps=self.json_serialize)
+
+        output_data = await self._process_input_data(input_data, http_request=http_request)
+
+        return web.json_response(output_data, dumps=self.json_serialize)
+
+
+class WsJsonRpcServer(BaseJsonRpcServer):
+    async def handle_http_request(self, http_request: web.Request) -> web.StreamResponse:
+        if http_request.method == 'GET' and http_request.headers.get('upgrade', '').lower() == 'websocket':
+            return await self.handle_websocket_request(http_request)
+        else:
+            return web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('POST',))
+
+    async def handle_websocket_request(self, http_request: web.Request) -> web_ws.WebSocketResponse:
+        http_request.msg_id = 0
+        http_request.pending = {}
+
+        ws = web_ws.WebSocketResponse()
+        await ws.prepare(http_request)
+        http_request.ws = ws
+
+        while not ws.closed:
+            ws_msg = await ws.receive()
+
+            if ws_msg.type != aiohttp.WSMsgType.TEXT:
+                continue
+
+            await self._handle_ws_msg(http_request, ws_msg)
+
+        return ws
+
+    async def _handle_ws_msg(self, http_request: web.Request, ws_msg: web_ws.WSMessage) -> None:
+        input_data = json.loads(ws_msg.data)
+        output_data = await self._process_input_data(input_data, http_request=http_request)
+
+        if http_request.ws._writer.transport.is_closing():
+            self.clients.remove(http_request)
+            await http_request.ws.close()
+
+        await http_request.ws.send_str(self.json_serialize(output_data))
 
 
 rpc_server = JsonRpcServer(
