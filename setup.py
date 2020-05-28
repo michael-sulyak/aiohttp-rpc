@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     setup(
         name='aiohttp-rpc',
-        version='0.4.0',
+        version='0.5.0',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',
@@ -21,13 +21,13 @@ if __name__ == '__main__':
             'aiohttp>=3,<4',
         ],
         license='MIT license',
-        python_requires='>=3.5',
+        python_requires='>=3.6',
         packages=find_packages(),
         classifiers=[
             # 'Development Status :: 1 - Planning',
             # 'Development Status :: 2 - Pre-Alpha',
-            'Development Status :: 3 - Alpha',
-            # 'Development Status :: 4 - Beta',
+            # 'Development Status :: 3 - Alpha',
+            'Development Status :: 4 - Beta',
             # 'Development Status :: 5 - Production/Stable',
             'Environment :: Web Environment',
             'Intended Audience :: Developers',
@@ -43,6 +43,7 @@ if __name__ == '__main__':
             'Topic :: Software Development :: Libraries',
             'Topic :: Software Development :: Libraries :: Python Modules',
         ],
+        description='A simple JSON-RPC for aiohttp',
         long_description=long_description,
         long_description_content_type='text/markdown',
     )
