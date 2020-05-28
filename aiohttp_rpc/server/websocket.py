@@ -1,7 +1,6 @@
 import json
 
-import aiohttp
-from aiohttp import web, web_ws
+from aiohttp import http_websocket, web, web_ws
 
 from .base import BaseJsonRpcServer
 
@@ -29,7 +28,7 @@ class WsJsonRpcServer(BaseJsonRpcServer):
         while not ws.closed:
             ws_msg = await ws.receive()
 
-            if ws_msg.type != aiohttp.WSMsgType.TEXT:
+            if ws_msg.type != http_websocket.WSMsgType.TEXT:
                 continue
 
             await self._handle_ws_msg(http_request, ws_msg)

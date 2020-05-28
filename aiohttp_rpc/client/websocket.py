@@ -65,17 +65,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             await self.ws_connect.send_str(self.json_serialize(data))
             return None, None
 
-        msg_ids = None
-
-        if isinstance(data, dict):
-            msg_ids = (data['id'],)
-        elif isinstance(data, list):
-            msg_ids = tuple(item['id'] for item in data)
-
-        if not msg_ids:
-            await self.ws_connect.send_str(self.json_serialize(data))
-            return None, None
-
+        msg_ids = self._get_msg_ids_from_json(data)
         future = asyncio.Future()
 
         for msg_id in msg_ids:
@@ -83,12 +73,35 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
         await self.ws_connect.send_str(self.json_serialize(data))
 
+        if not msg_ids:
+            return None, None
+
         if self.timeout is not None:
             future = asyncio.wait_for(future, timeout=self.timeout)
 
         result = await future
 
         return result, None
+
+    def clear_pending(self) -> None:
+        self._pending = {}
+
+    @staticmethod
+    def _get_msg_ids_from_json(data: typing.Any) -> typing.Optional[list]:
+        if not data:
+            return []
+
+        if isinstance(data, dict) and data.get('id') is not None:
+            return [data['id']]
+
+        if isinstance(data, list):
+            return [
+                item['id']
+                for item in data
+                if item.get('id') is not None
+            ]
+
+        return []
 
     async def _handle_ws_messages(self) -> typing.NoReturn:
         while not self.ws_connect.closed:
