@@ -97,19 +97,12 @@ class BaseJsonRpcServer(abc.ABC):
                                   data: typing.Union[dict, list], *,
                                   http_request: typing.Optional[web.Request] = None) -> typing.Any:
         if isinstance(data, list):
-            json_responses = await asyncio.gather(*(
+            coros = (
                 self._process_single_json_request(raw_rcp_request, http_request=http_request)
                 for raw_rcp_request in data
-            ), return_exceptions=True)
-
-            for i, json_response in enumerate(json_responses):
-                if isinstance(json_response, errors.JsonRpcError):
-                    json_responses[i] = protocol.JsonRpcResponse(error=json_response)
-                elif isinstance(json_response, Exception):
-                    json_responses[i] = protocol.JsonRpcResponse(
-                        error=errors.JsonRpcError(utils.get_exc_message(json_response)),
-                    )
-
+            )
+            json_responses = await asyncio.gather(*coros, return_exceptions=True)
+            self._prepare_exceptions(json_responses)
             return json_responses
 
         if isinstance(data, dict):
@@ -117,6 +110,14 @@ class BaseJsonRpcServer(abc.ABC):
 
         response = protocol.JsonRpcResponse(error=errors.ParseError('Data must be a dict or an list.'))
         return response.to_dict()
+
+    @staticmethod
+    def _prepare_exceptions(values: list):
+        for i, value in enumerate(values):
+            if isinstance(value, errors.JsonRpcError):
+                values[i] = protocol.JsonRpcResponse(error=value)
+            elif isinstance(value, Exception):
+                values[i] = protocol.JsonRpcResponse(error=errors.JsonRpcError(utils.get_exc_message(value)))
 
     async def _process_single_json_request(self,
                                            json_request: dict, *,
