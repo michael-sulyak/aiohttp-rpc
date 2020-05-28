@@ -2,7 +2,6 @@
 
 [![PyPI](https://img.shields.io/pypi/v/aiohttp-rpc.svg?style=flat)](https://pypi.org/project/aiohttp-rpc/)
 [![PyPI - Python Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8-blue?style=flat)](https://www.python.org/downloads/release/python-380/)
-[![AIOHTTP Version](https://img.shields.io/badge/aiohttp-3-blue?style=flat)](https://docs.aiohttp.org/en/stable/)
 [![Scrutinizer Code Quality](https://img.shields.io/scrutinizer/g/expert-m/aiohttp-rpc.svg?style=flat)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/?branch=master)
 [![Build Status](https://img.shields.io/scrutinizer/build/g/expert-m/aiohttp-rpc.svg?style=flat)](https://scrutinizer-ci.com/g/expert-m/aiohttp-rpc/build-status/master)
 [![PyPI - Downloads](https://img.shields.io/pypi/dw/aiohttp-rpc?style=flat)](https://pypi.org/project/aiohttp-rpc/)
