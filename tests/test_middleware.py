@@ -1,14 +1,30 @@
+import os
+import sys
+
 import pytest
 
 import aiohttp_rpc
 
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from tests import utils
+
+
 @pytest.mark.asyncio
-async def test_default_middleware():
+async def test_middleware(aiohttp_client):
     def method():
         return 'ok'
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    async def test_middleware(request, handler):
+        request.method = 'method'
+        response = await handler(request)
+        response.result += '!'
+        return response
+
+    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(test_middleware,))
     rpc_server.add_method(method)
 
+    client = await utils.make_client(aiohttp_client, rpc_server)
 
+    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+        assert await rpc.call('my_method') == 'ok!'

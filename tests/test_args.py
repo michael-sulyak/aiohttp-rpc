@@ -102,7 +102,7 @@ async def test_extra_kwargs(aiohttp_client):
     def method_2(*, rpc_request):
         return rpc_request.__class__.__name__
 
-    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.ExtraArgsMiddleware,))
+    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
     rpc_server.add_method(method)
     rpc_server.add_method(method_2)
 
@@ -114,3 +114,16 @@ async def test_extra_kwargs(aiohttp_client):
     async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.call('method') == 'JsonRpcRequest'
         assert await rpc.call('method_2') == 'JsonRpcRequest'
+
+
+@pytest.mark.asyncio
+async def test_builtin_funcs(aiohttp_client):
+    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+    rpc_server.add_method(sum)
+    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', zip, prepare_result=list))
+
+    client = await utils.make_client(aiohttp_client, rpc_server)
+
+    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+        assert await rpc.sum([1, 2, 3]) == 6
+        assert await rpc.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
