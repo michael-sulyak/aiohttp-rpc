@@ -105,7 +105,7 @@ And so, when you start adding existing functions, some problems may arise.
 
 Existing functions can return objects that are not serialized, but this is easy to fix.
 You can add own `json_serialize`:
-```
+```python3
 async def get_user_by_uuid(user_uuid: typing.Union[str, uuid.uuid4]) -> typing.Optional[User]:
     pass
 
@@ -152,7 +152,8 @@ If you need to replace the function arguments, then you can use [middleware](#mi
 
 ## Middleware
 
-Middleware is used for request/response processing. 
+Middleware is used for request/response processing.
+It has a similar interface as [aiohttp middleware](https://docs.aiohttp.org/en/stable/web_advanced.html#middlewares).
 
 ```python3
 import aiohttp_rpc
@@ -170,24 +171,7 @@ rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=[
 ])
 ```
 
-To process `web.Request`/`web.Response`, wrap function `aiohttp_rpc.JsonServer.handle_http_request`:
-```python3
-def my_handle_http_request(request):
-    # something
-    # for example, authorization
-    return aiohttp_rpc.rpc_server.handle_http_request
-
-...
-
-app = web.Application()
-app.router.add_routes((
-    web.post('/rpc', my_handle_http_request),
-))
-Or add `middleware` in [aiohttp](https://github.com/aio-libs/aiohttp).
-
-....
-```
-
+Or use [aiohttp middlewares](https://docs.aiohttp.org/en/stable/web_advanced.html#middlewares) to process `web.Request`/`web.Response`.
 
 [back to top](#table-of-contents)
 
@@ -217,7 +201,7 @@ if __name__ == '__main__':
     app.router.add_routes([
         web.get('/rpc', rpc_server.handle_http_request),
     ])
-
+    app.on_shutdown.append(rpc_server.on_shutdown)
     web.run_app(app, host='0.0.0.0', port=8080)
 ```
 
@@ -251,9 +235,9 @@ loop.run_until_complete(run())
   * `class aiohttp_rpc.JsonRpc(BaseJsonRpcServer)`
     * `def __init__(self, *, son_serialize = aiohttp_rpc.utils.json_serialize, middlewares: typing.Iterable = (), methods = None)`
     * `def add_method(self, method, *, replace = False) -> aiohttp_rpc.JsonRpcMethod`
-    * `def add_methods(self, methods, replace = False) -> typing.List[aiohttp_rpc.JsonRpcMethod]:`
+    * `def add_methods(self, methods, replace = False) -> typing.List[aiohttp_rpc.JsonRpcMethod]`
     * `def get_methods(self) -> dict`
-    * `async def handle_http_request(self, http_request: web.Request) -> web.Response`:
+    * `async def handle_http_request(self, http_request: web.Request) -> web.Response`
 
   * `class aiohttp_rpc.JsonRpcClient(BaseJsonRpcClient)`
   
@@ -265,7 +249,7 @@ loop.run_until_complete(run())
 ### `protocol`
   * `class aiohttp_rpc.JsonRpcRequest`
   * `class aiohttp_rpc.JsonRpcResponse`
-  * `class aiohttp_rpc.JsonRpcMethod`
+  * `class aiohttp_rpc.JsonRpcMethod(BaseJsonRpcMethod)`
 
 ### `decorators`
   * `def rpc_method(prefix = '', *, rpc_server = default_rpc_server, custom_name = None, add_extra_args = True)`
@@ -281,9 +265,8 @@ loop.run_until_complete(run())
   * `DEFAULT_KNOWN_ERRORS`
   
 ### `middlewares`
-  * `class BaseJsonRpcMiddleware(abc.ABC)`
-  * `class ExceptionMiddleware(BaseJsonRpcMiddleware)`
-  * `class ExtraArgsMiddleware(BaseJsonRpcMiddleware)`
+  * `async def extra_args_middleware(request, handler)`
+  * `async def exception_middleware(request, handler)`
 
 [back to top](#table-of-contents)
 
@@ -292,8 +275,7 @@ loop.run_until_complete(run())
 
 ## More examples
 
-The library allows you to add methods in many ways.
-
+**The library allows you to add methods in many ways:**
 ```python3
 import aiohttp_rpc
 
@@ -314,6 +296,24 @@ rpc_server.add_method(['', ping_1], replace=True)  # 'ping_1'
 rpc_server.add_methods([ping_1, ping_2], replace=True)  # 'ping_1', 'ping_2'
 
 rpc_server.add_methods([['new', ping_2], ping_3])  # 'new__ping2', 'ping_3'
+```
+
+**Example with built-in functions:**
+```python3
+# Server
+import aiohttp_rpc
+
+rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+rpc_server.add_method(sum)
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', zip, prepare_result=list))
+...
+
+# Client
+client = await utils.make_client(aiohttp_client, rpc_server)
+
+async with aiohttp_rpc.JsonRpcClient('/rpc') as rpc:
+    assert await rpc.sum([1, 2, 3]) == 6
+    assert await rpc.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
 ```
 
 [back to top](#table-of-contents)
