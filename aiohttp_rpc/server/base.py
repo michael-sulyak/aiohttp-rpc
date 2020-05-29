@@ -1,6 +1,7 @@
 import abc
 import asyncio
 import typing
+from functools import partial
 
 from aiohttp import web
 
@@ -13,17 +14,20 @@ __all__ = (
 
 
 class BaseJsonRpcServer(abc.ABC):
-    methods: typing.Dict[str, protocol.JsonRpcMethod]
-    middlewares: typing.Tuple[typing.Type[rpc_middleware.BaseJsonRpcMiddleware], ...]
+    methods: typing.Dict[str, protocol.BaseJsonRpcMethod]
+    middlewares: typing.Tuple[typing.Callable, ...]
     json_serialize: typing.Callable
     _middleware_chain: typing.Callable
 
     def __init__(self, *,
                  json_serialize: typing.Callable = utils.json_serialize,
                  middlewares: typing.Iterable = (),
-                 methods: typing.Optional[typing.Dict[str, protocol.JsonRpcMethod]] = None) -> None:
+                 methods: typing.Optional[typing.Dict[str, protocol.BaseJsonRpcMethod]] = None) -> None:
         if methods is None:
-            methods = {'get_methods': protocol.JsonRpcMethod('', self.get_methods)}
+            methods = {
+                'get_method': protocol.JsonRpcMethod('', self.get_method),
+                'get_methods': protocol.JsonRpcMethod('', self.get_methods),
+            }
 
         self.methods = methods
 
@@ -35,18 +39,13 @@ class BaseJsonRpcServer(abc.ABC):
     def load_middlewares(self):
         self._middleware_chain = self._process_single_request
 
-        for middleware_class in reversed(self.middlewares):
-            if isinstance(middleware_class, (list, tuple,)):
-                middleware_class, kwargs = middleware_class
-                self._middleware_chain = middleware_class(server=self, get_response=self._middleware_chain, **kwargs)
-                continue
-
-            self._middleware_chain = middleware_class(server=self, get_response=self._middleware_chain)
+        for middleware in reversed(self.middlewares):
+            self._middleware_chain = partial(middleware, handler=self._middleware_chain)
 
     def add_method(self,
-                   method: typing.Union[protocol.JsonRpcMethod, tuple, list, typing.Callable], *,
-                   replace: bool = False) -> protocol.JsonRpcMethod:
-        if not isinstance(method, protocol.JsonRpcMethod):
+                   method: typing.Union[protocol.BaseJsonRpcMethod, tuple, list, typing.Callable], *,
+                   replace: bool = False) -> protocol.BaseJsonRpcMethod:
+        if not isinstance(method, protocol.BaseJsonRpcMethod):
             if callable(method):
                 method = protocol.JsonRpcMethod('', method)
             else:
@@ -60,8 +59,8 @@ class BaseJsonRpcServer(abc.ABC):
         return method
 
     def add_methods(self,
-                    methods: typing.Iterable[typing.Union[protocol.JsonRpcMethod, tuple, list, typing.Callable]], *,
-                    replace: bool = False) -> typing.List[protocol.JsonRpcMethod]:
+                    methods: typing.Iterable[typing.Union[protocol.BaseJsonRpcMethod, tuple, list, typing.Callable]], *,
+                    replace: bool = False) -> typing.List[protocol.BaseJsonRpcMethod]:
         return [
             self.add_method(method, replace=replace)
             for method in methods
@@ -91,6 +90,18 @@ class BaseJsonRpcServer(abc.ABC):
                 'kwargs': method.supported_kwargs,
             }
             for name, method in self.methods.items()
+        }
+
+    def get_method(self, name: str) -> typing.Optional[dict]:
+        method = self.methods.get(name)
+
+        if not method:
+            return None
+
+        return {
+            'doc': method.func.__doc__,
+            'args': method.supported_args,
+            'kwargs': method.supported_kwargs,
         }
 
     async def _process_input_data(self,
