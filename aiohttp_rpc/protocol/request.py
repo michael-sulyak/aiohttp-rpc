@@ -1,4 +1,5 @@
 import typing
+from dataclasses import dataclass, field
 
 from .. import constants, errors, utils
 
@@ -8,63 +9,33 @@ __all__ = (
 )
 
 
+@dataclass
 class JsonRpcRequest:
-    msg_id: typing.Any
     method: str
-    jsonrpc: str
-    extra_args: dict
-    context: dict
-    _params: typing.Any
-    _args: list
-    _kwargs: dict
+    msg_id: typing.Any = constants.NOTHING
+    jsonrpc: str = constants.VERSION_2_0
+    extra_args: dict = field(default_factory=dict)
+    context: dict = field(default_factory=dict)
+    params: typing.Any = constants.NOTHING
+    args: typing.Optional[typing.Union[list, tuple]] = None
+    kwargs: typing.Optional[dict] = None
 
-    def __init__(self, *,
-                 msg_id: typing.Any = constants.NOTHING,
-                 method: str,
-                 jsonrpc: typing.Any = constants.VERSION_2_0,
-                 params: typing.Any = constants.NOTHING,
-                 args: typing.Any = None,
-                 kwargs: typing.Any = None,
-                 context: typing.Optional[dict] = None) -> None:
-        utils.validate_jsonrpc(jsonrpc)
+    def __post_init__(self):
+        utils.validate_jsonrpc(self.jsonrpc)
 
-        self.msg_id = msg_id
-        self.method = method
-        self.jsonrpc = jsonrpc
-        self.extra_args = {}
-        self.context = {} if context is None else context
-
-        if params is constants.NOTHING:
-            self.args_and_kwargs = args, kwargs
-        elif not args and not kwargs:
-            self.params = params
+        if self.params is constants.NOTHING:
+            self.set_args_and_kwargs(self.args, self.kwargs)
+        elif not self.args and not self.kwargs:
+            self.set_params(self.params)
         else:
             raise errors.InvalidParams('Need use params or args with kwargs.')
 
-    @property
-    def params(self) -> typing.Any:
-        return self._params
+    def set_params(self, params: typing.Any) -> None:
+        self.params = params
+        self.args, self.kwargs = utils.convert_params_to_args_and_kwargs(params)
 
-    @params.setter
-    def params(self, value: typing.Any) -> None:
-        self._params = value
-        self._args, self._kwargs = utils.convert_params_to_args_and_kwargs(value)
-
-    @property
-    def args(self) -> list:
-        return self._args
-
-    @property
-    def kwargs(self) -> dict:
-        return self._kwargs
-
-    @property
-    def args_and_kwargs(self) -> typing.Tuple[list, dict]:
-        return self._args, self._kwargs
-
-    @args_and_kwargs.setter
-    def args_and_kwargs(self, value: typing.Tuple[typing.Optional[list], typing.Optional[dict]]) -> None:
-        self._params, self._args, self._kwargs = utils.parse_args_and_kwargs(*value)
+    def set_args_and_kwargs(self, args: typing.Optional[list] = None, kwargs: typing.Optional[dict] = None) -> None:
+        self.params, self.args, self.kwargs = utils.parse_args_and_kwargs(args, kwargs)
 
     @property
     def is_notification(self) -> bool:
