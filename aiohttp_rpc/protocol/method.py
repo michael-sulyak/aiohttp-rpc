@@ -1,3 +1,4 @@
+import abc
 import asyncio
 import inspect
 import typing
@@ -6,34 +7,51 @@ from .. import errors, utils
 
 
 __all__ = (
+    'BaseJsonRpcMethod',
     'JsonRpcMethod',
 )
 
 
-class JsonRpcMethod:
-    separator: str = '__'
-    prefix: str
+class BaseJsonRpcMethod(abc.ABC):
     name: str
-    func: typing.Callable
-    add_extra_args: bool
-    is_coroutine: bool
-    supported_args: list
-    supported_kwargs: list
+    func: typing.Union[typing.Callable, typing.Type]
+    separator: str = '__'
 
     def __init__(self,
                  prefix: str,
-                 func: typing.Callable, *,
-                 custom_name: typing.Optional[str] = None,
-                 add_extra_args: bool = True) -> None:
+                 func: typing.Union[typing.Callable, typing.Type], *,
+                 custom_name: typing.Optional[str] = None) -> None:
         assert callable(func)
 
-        self.prefix = prefix
         self.func = func
-        self.add_extra_args = add_extra_args
         self.name = custom_name if custom_name else func.__name__
 
         if prefix:
             self.name = f'{prefix}{self.separator}{self.name}'
+
+    @abc.abstractmethod
+    async def __call__(self, args: list, kwargs: dict, extra_args: typing.Optional[dict] = None) -> typing.Any:
+        pass
+
+
+class JsonRpcMethod(BaseJsonRpcMethod):
+    add_extra_args: bool
+    is_coroutine: bool
+    is_class: bool
+    supported_args: list
+    supported_kwargs: list
+    prepare_result: typing.Optional[typing.Callable]
+
+    def __init__(self,
+                 prefix: str,
+                 func: typing.Union[typing.Callable, typing.Type], *,
+                 custom_name: typing.Optional[str] = None,
+                 add_extra_args: bool = True,
+                 prepare_result: typing.Optional[typing.Callable] = None) -> None:
+        super().__init__(prefix, func, custom_name=custom_name)
+
+        self.add_extra_args = add_extra_args
+        self.prepare_result = prepare_result
 
         self._inspect_func()
 
