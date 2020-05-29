@@ -42,25 +42,34 @@ class JsonRpcMethod:
             args, kwargs = self._add_extra_args_in_args_and_kwargs(args, kwargs, extra_args)
 
         try:
-            inspect.signature(self.func).bind(*args, **kwargs)
+            func = self.func.__init__ if self.is_class else self.func
+            inspect.signature(func).bind(*args, **kwargs)
         except TypeError as e:
             raise errors.InvalidParams(utils.get_exc_message(e)) from e
 
         if self.is_coroutine:
-            return await self.func(*args, **kwargs)
+            result = await self.func(*args, **kwargs)
+        else:
+            result = self.func(*args, **kwargs)
 
-        return self.func(*args, **kwargs)
+        if self.prepare_result:
+            result = self.prepare_result(result)
+
+        return result
 
     def _inspect_func(self) -> None:
-        argspec = inspect.getfullargspec(self.func)
+        self.is_class = inspect.isclass(self.func)
+        func = self.func.__init__ if self.is_class else self.func
 
-        if inspect.ismethod(self.func):
+        argspec = inspect.getfullargspec(func)
+
+        if inspect.ismethod(func):
             self.supported_args = argspec.args[1:]
         else:
             self.supported_args = argspec.args
 
         self.supported_kwargs = argspec.kwonlyargs
-        self.is_coroutine = asyncio.iscoroutinefunction(self.func)
+        self.is_coroutine = asyncio.iscoroutinefunction(func)
 
     def _add_extra_args_in_args_and_kwargs(self,
                                            args: list,
