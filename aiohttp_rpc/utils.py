@@ -42,6 +42,10 @@ def parse_args_and_kwargs(args: typing.Any, kwargs: typing.Any) -> typing.Tuple:
 
     if has_args:
         args = list(args)
+
+        if len(args) == 1 and isinstance(args[0], constants.JSON_PRIMITIVE_TYPES):
+            return args[0], args, {}
+
         return args, args, {}
 
     kwargs = dict(kwargs)
