@@ -59,11 +59,7 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         if self.add_extra_args and extra_args:
             args, kwargs = self._add_extra_args_in_args_and_kwargs(args, kwargs, extra_args)
 
-        try:
-            func = self.func.__init__ if self.is_class else self.func
-            inspect.signature(func).bind(*args, **kwargs)
-        except TypeError as e:
-            raise errors.InvalidParams(utils.get_exc_message(e)) from e
+        self._check_func_signature(args, kwargs)
 
         if self.is_coroutine:
             result = await self.func(*args, **kwargs)
@@ -77,17 +73,24 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
     def _inspect_func(self) -> None:
         self.is_class = inspect.isclass(self.func)
-        func = self.func.__init__ if self.is_class else self.func
+        func = self.func.__init__ if self.is_class else self._unwrap_func(self.func)
 
         argspec = inspect.getfullargspec(func)
 
-        if inspect.ismethod(func):
+        if self.is_class or inspect.ismethod(func):
             self.supported_args = argspec.args[1:]
         else:
             self.supported_args = argspec.args
 
         self.supported_kwargs = argspec.kwonlyargs
         self.is_coroutine = asyncio.iscoroutinefunction(func)
+
+    @staticmethod
+    def _unwrap_func(func: typing.Callable) -> typing.Callable:
+        while hasattr(func, '__wrapped__'):
+            func = func.__wrapped__
+
+        return func
 
     def _add_extra_args_in_args_and_kwargs(self,
                                            args: list,
@@ -129,3 +132,12 @@ class JsonRpcMethod(BaseJsonRpcMethod):
             kwargs = {**kwargs, **new_kwargs}
 
         return kwargs
+
+    def _check_func_signature(self, args: list, kwargs: dict) -> None:
+        try:
+            if self.is_class:
+                inspect.signature(self.func.__init__).bind(None, *args, **kwargs)
+            else:
+                inspect.signature(self.func).bind(*args, **kwargs)
+        except TypeError as e:
+            raise errors.InvalidParams(utils.get_exc_message(e)) from e
