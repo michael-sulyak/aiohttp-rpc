@@ -87,8 +87,14 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
     @staticmethod
     def _unwrap_func(func: typing.Callable) -> typing.Callable:
+        i = 0
+
         while hasattr(func, '__wrapped__'):
             func = func.__wrapped__
+            i += 1
+
+            if i > 1_000:
+                raise errors.InternalError('The method has too many wrappers.')
 
         return func
 
