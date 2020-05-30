@@ -139,8 +139,10 @@ rpc_server = aiohttp_rpc.JsonRpcServer(
     json_serialize=partial(json.dumps, default=json_serialize_unknown_value),
 )
 rpc_server.add_method(get_user_by_uuid)
+...
+
 """
-Response:
+Example of response:
 {
     "id": null,
     "jsonrpc": "2.0",
@@ -245,24 +247,33 @@ loop.run_until_complete(run())
 
 
 ### `server`
-  * `class aiohttp_rpc.JsonRpc(BaseJsonRpcServer)`
-    * `def __init__(self, *, son_serialize = aiohttp_rpc.utils.json_serialize, middlewares: typing.Iterable = (), methods = None)`
+  * `class JsonRpcServer(BaseJsonRpcServer)`
+    * `def __init__(self, *, json_serialize = aiohttp_rpc.utils.json_serialize, middlewares: typing.Iterable = (), methods = None)`
     * `def add_method(self, method, *, replace = False) -> aiohttp_rpc.JsonRpcMethod`
     * `def add_methods(self, methods, replace = False) -> typing.List[aiohttp_rpc.JsonRpcMethod]`
     * `def get_methods(self) -> dict`
     * `async def handle_http_request(self, http_request: web.Request) -> web.Response`
-
-  * `class aiohttp_rpc.JsonRpcClient(BaseJsonRpcClient)`
+ 
+  * `class WsJsonRpcServer(BaseJsonRpcServer)`
+  * `rpc_server: JsonRpcServer`
   
+
 ### `client`
-  * `class aiohttp_rpc.WsJsonRpcServer(BaseJsonRpcServer)`
-  * `class aiohttp_rpc.WsJsonRpcClient(BaseJsonRpcClient)`
+  * `class JsonRpcClient(BaseJsonRpcClient)`
+    * `async def connect(self)`
+    * `async def disconnect(self)`
+    * `async def call(self, method: str, *args, **kwargs)`
+    * `async def notify(self, method: str, *args, **kwargs)`
+    * `async def batch(self, methods: typing.Iterable[typing.Union[str, list, tuple]])`
+    * `async def batch_notify(self, methods: typing.Iterable[typing.Union[str, list, tuple]])`
+  
+  * `class WsJsonRpcClient(BaseJsonRpcClient)`
   * `class UnlinkedResults`
 
 ### `protocol`
-  * `class aiohttp_rpc.JsonRpcRequest`
-  * `class aiohttp_rpc.JsonRpcResponse`
-  * `class aiohttp_rpc.JsonRpcMethod(BaseJsonRpcMethod)`
+  * `class JsonRpcRequest`
+  * `class JsonRpcResponse`
+  * `class JsonRpcMethod(BaseJsonRpcMethod)`
 
 ### `decorators`
   * `def rpc_method(prefix = '', *, rpc_server = default_rpc_server, custom_name = None, add_extra_args = True)`
@@ -281,6 +292,9 @@ loop.run_until_complete(run())
   * `async def extra_args_middleware(request, handler)`
   * `async def exception_middleware(request, handler)`
   * `DEFAULT_MIDDLEWARES`
+
+### `utils`
+  * `def json_serialize(*args, **kwargs)`
 
 [back to top](#table-of-contents)
 
