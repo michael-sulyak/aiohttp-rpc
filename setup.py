@@ -21,7 +21,7 @@ if __name__ == '__main__':
             'aiohttp>=3,<4',
         ],
         license='MIT license',
-        python_requires='>=3.6',
+        python_requires='>=3.6.5',
         packages=find_packages(),
         classifiers=[
             # 'Development Status :: 1 - Planning',
