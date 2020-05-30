@@ -23,7 +23,7 @@ build:
 
     py37:
       environment:
-        python: 3.7.2
+        python: 3.7.0
 
     py38:
       environment:
