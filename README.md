@@ -106,11 +106,25 @@ And so, when you start adding existing functions, some problems may arise.
 Existing functions can return objects that are not serialized, but this is easy to fix.
 You can add own `json_serialize`:
 ```python3
-async def get_user_by_uuid(user_uuid: typing.Union[str, uuid.uuid4]) -> typing.Optional[User]:
-    pass
+import aiohttp_rpc
+import typing
+import uuid
+import json
+from dataclasses import dataclass
+from functools import partial
+
+@dataclass
+class User:
+    uuid: uuid.UUID
+    id: int = 0
+    username: str = 'mike'
+    email: str = 'some@mail.com'
+
+async def get_user_by_uuid(user_uuid) -> User:
+    return User(uuid=uuid.UUID(user_uuid))
 
 
-def json_serialize_unknown_value(value) -> typing.Any:
+def json_serialize_unknown_value(value):
     if isinstance(value, User):
         return {
             'id': value.id,
@@ -124,19 +138,16 @@ def json_serialize_unknown_value(value) -> typing.Any:
 rpc_server = aiohttp_rpc.JsonRpcServer(
     json_serialize=partial(json.dumps, default=json_serialize_unknown_value),
 )
-rpc_server.add_methods((
-    get_user_by_uuid,
-))
-
+rpc_server.add_method(get_user_by_uuid)
 """
 Response:
 {
     "id": null,
     "jsonrpc": "2.0",
     "result": {
-        "id": 2510,
+        "id": 0,
         "uuid": "600d57b3-dda8-43d0-af79-3e81dbb344fa",
-        "username": "Mike",
+        "username": "mike",
         "email": "some@mail.com"
     }
 }
@@ -144,6 +155,8 @@ Response:
 ```
 
 If you need to replace the function arguments, then you can use [middleware](#middleware).
+
+If you want to add permission checking for each method, then override the class `JsonRpcMethod`.
 
 [back to top](#table-of-contents)
 
@@ -157,17 +170,17 @@ It has a similar interface as [aiohttp middleware](https://docs.aiohttp.org/en/s
 
 ```python3
 import aiohttp_rpc
+import typing
 
-class TokenMiddleware(aiohttp_rpc.BaseJsonRpcMiddleware):
-    async def __call__(self, request: aiohttp_rpc.JsonRpcRequest) -> aiohttp_rpc.JsonRpcResponse:
-        if request.http_request and request.http_request.headers.get('X-App-Token') != 'qwerty':
-            raise exceptions.InvalidRequest('Invalid token')
+async def token_middleware(request: aiohttp_rpc.JsonRpcRequest, handler: typing.Callable) -> aiohttp_rpc.JsonRpcResponse:
+    if request.http_request and request.http_request.headers.get('X-App-Token') != 'qwerty':
+        raise exceptions.InvalidRequest('Invalid token')
 
-        return await self.get_response(request)
+    return await handler(request)
 
 rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=[
-     aiohttp_rpc.ExceptionMiddleware,
-     TokenMiddleware,
+     aiohttp_rpc.middlewares.exception_middleware,
+     token_middleware,
 ])
 ```
 
@@ -267,6 +280,7 @@ loop.run_until_complete(run())
 ### `middlewares`
   * `async def extra_args_middleware(request, handler)`
   * `async def exception_middleware(request, handler)`
+  * `DEFAULT_MIDDLEWARES`
 
 [back to top](#table-of-contents)
 
@@ -309,8 +323,6 @@ rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', zip, prepare_result=list))
 ...
 
 # Client
-client = await utils.make_client(aiohttp_client, rpc_server)
-
 async with aiohttp_rpc.JsonRpcClient('/rpc') as rpc:
     assert await rpc.sum([1, 2, 3]) == 6
     assert await rpc.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
