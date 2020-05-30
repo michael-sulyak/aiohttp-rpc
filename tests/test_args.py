@@ -1,3 +1,4 @@
+import functools
 import os
 import sys
 
@@ -114,6 +115,51 @@ async def test_extra_kwargs(aiohttp_client):
     async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.call('method') == 'JsonRpcRequest'
         assert await rpc.call('method_2') == 'JsonRpcRequest'
+
+
+@pytest.mark.asyncio
+async def test_extra_kwargs_with_class(aiohttp_client):
+    class TestClass:
+        def __init__(self, rpc_request):
+            self.rpc_request = rpc_request
+
+        def __str__(self):
+            return self.rpc_request.__class__.__name__
+
+    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', TestClass, prepare_result=str))
+
+    client = await utils.make_client(aiohttp_client, rpc_server)
+
+    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+        assert await rpc.call('TestClass') == 'JsonRpcRequest'
+
+
+@pytest.mark.asyncio
+async def test_extra_kwargs_with_wrapper(aiohttp_client):
+    def test_decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    @test_decorator
+    def method(rpc_request):
+        return rpc_request.__class__.__name__
+
+    @test_decorator
+    def method_2():
+        return True
+
+    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+    rpc_server.add_methods((method, method_2,))
+
+    client = await utils.make_client(aiohttp_client, rpc_server)
+
+    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+        assert await rpc.call('method') == 'JsonRpcRequest'
+        assert await rpc.call('method_2') is True
 
 
 @pytest.mark.asyncio
