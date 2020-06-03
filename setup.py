@@ -21,6 +21,9 @@ if __name__ == '__main__':
             'aiohttp>=3,<4',
         ],
         license='MIT license',
+        description='A simple JSON-RPC for aiohttp',
+        long_description=long_description,
+        long_description_content_type='text/markdown',
         python_requires='>=3.6.5',
         packages=find_packages(),
         classifiers=[
@@ -43,7 +46,8 @@ if __name__ == '__main__':
             'Topic :: Software Development :: Libraries',
             'Topic :: Software Development :: Libraries :: Python Modules',
         ],
-        description='A simple JSON-RPC for aiohttp',
-        long_description=long_description,
-        long_description_content_type='text/markdown',
+        project_urls={
+            'GitHub: issues': 'https://github.com/expert-m/aiohttp-rpc/issues',
+            'GitHub: repo': 'https://github.com/expert-m/aiohttp-rpc',
+        },
     )
