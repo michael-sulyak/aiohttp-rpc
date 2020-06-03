@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     setup(
         name='aiohttp-rpc',
-        version='0.6.1',
+        version='0.6.2',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',
@@ -30,8 +30,8 @@ if __name__ == '__main__':
             # 'Development Status :: 1 - Planning',
             # 'Development Status :: 2 - Pre-Alpha',
             # 'Development Status :: 3 - Alpha',
-            'Development Status :: 4 - Beta',
-            # 'Development Status :: 5 - Production/Stable',
+            # 'Development Status :: 4 - Beta',
+            'Development Status :: 5 - Production/Stable',
             'Environment :: Web Environment',
             'Intended Audience :: Developers',
             'License :: OSI Approved :: MIT License',
