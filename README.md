@@ -247,9 +247,9 @@ loop.run_until_complete(run())
 
 ### `server`
   * `class JsonRpcServer(BaseJsonRpcServer)`
-    * `def __init__(self, *, json_serialize = aiohttp_rpc.utils.json_serialize, middlewares: typing.Iterable = (), methods = None)`
-    * `def add_method(self, method, *, replace = False) -> aiohttp_rpc.JsonRpcMethod`
-    * `def add_methods(self, methods, replace = False) -> typing.List[aiohttp_rpc.JsonRpcMethod]`
+    * `def __init__(self, *, json_serialize=json_serialize, middlewares=(), methods=None)`
+    * `def add_method(self, method, *, replace=False) -> JsonRpcMethod`
+    * `def add_methods(self, methods, replace=False) -> typing.List[JsonRpcMethod]`
     * `def get_methods(self) -> dict`
     * `async def handle_http_request(self, http_request: web.Request) -> web.Response`
  
@@ -271,11 +271,28 @@ loop.run_until_complete(run())
 
 ### `protocol`
   * `class JsonRpcRequest`
+    * `method: str`
+    * `msg_id: typing.Any`
+    * `jsonrpc: str`
+    * `extra_args: dict`
+    * `context: dict`
+    * `params: typing.Any`
+    * `args: typing.Optional[typing.Union[list, tuple]]`
+    * `kwargs: typing.Optional[dict]`
+    * `is_notification: bool`
+    
   * `class JsonRpcResponse`
+    * `jsonrpc: str`
+    * `msg_id: typing.Any`
+    * `result: typing.Any`
+    * `error: typing.Optional[JsonRpcError]`
+    * `context: dict`
+    
   * `class JsonRpcMethod(BaseJsonRpcMethod)`
+    * `def __init__(self, prefix, func, *, custom_name=None, add_extra_args=True, prepare_result=None)`
 
 ### `decorators`
-  * `def rpc_method(prefix = '', *, rpc_server = default_rpc_server, custom_name = None, add_extra_args = True)`
+  * `def rpc_method(prefix = '', *, rpc_server=default_rpc_server, custom_name=None, add_extra_args=True)`
 
 ### `errors`
   * `class JsonRpcError(RuntimeError)`
@@ -294,6 +311,10 @@ loop.run_until_complete(run())
 
 ### `utils`
   * `def json_serialize(*args, **kwargs)`
+
+### `constants`
+  * `NOTHING`
+  * `VERSION_2_0`
 
 [back to top](#table-of-contents)
 
