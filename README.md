@@ -15,11 +15,11 @@ The motivation is to provide a simple, fast and reliable way to integrate the JS
 >* **[aiohttp](https://github.com/aio-libs/aiohttp)** - Async http client/server framework
 
 ## Table Of Contents
-- [Installation](#installation)
-    - [pip](#pip)
-- [Usage](#usage)
-  - [HTTP Server Example](#http-server-example)
-  - [HTTP Client Example](#http-client-example)
+- **[Installation](#installation)**
+    - **[pip](#pip)**
+- **[Usage](#usage)**
+  - **[HTTP Server Example](#http-server-example)**
+  - **[HTTP Client Example](#http-client-example)**
 - [Integration](#Integration)
 - [Middleware](#middleware)
 - [WebSockets](#websockets)
@@ -45,7 +45,6 @@ from aiohttp import web
 import aiohttp_rpc
 
 
-@aiohttp_rpc.rpc_method()
 def echo(*args, **kwargs):
     return {
         'args': args,
@@ -59,7 +58,8 @@ async def ping(rpc_request):
 
 if __name__ == '__main__':
     aiohttp_rpc.rpc_server.add_methods([
-        ('', ping,),
+        ping,
+        echo,
     ])
 
     app = web.Application()
@@ -80,8 +80,9 @@ async def run():
         print(await rpc.ping())
         print(await rpc.echo(a=4, b=6))
         print(await rpc.call('echo', a=4, b=6))
-        print(await rpc.notify('echo', 1, 2, 3))
         print(await rpc.echo(1, 2, 3))
+        print(await rpc.notify('echo', 1, 2, 3))
+        print(await rpc.get_methods())
         print(await rpc.batch([
             ['echo', 2], 
             'echo2',
@@ -162,11 +163,11 @@ But you can go further.
 If you want to use functions that accept custom types,
 then you can do something like this:
 ```python3
-# The function that takes a custom type.
+# The function (RPC method) that takes a custom type.
 def generate_user_token(user: User):
     return f'token-{str(user.uuid).split("-")[0]}'
 
-async def replace_type(data: typing.Any):
+async def replace_type(data):
     if not isinstance(data, dict) or '__type__' not in data:
         return data
 
@@ -229,17 +230,20 @@ It has a similar interface as [aiohttp middleware](https://docs.aiohttp.org/en/s
 import aiohttp_rpc
 import typing
 
-async def token_middleware(request: aiohttp_rpc.JsonRpcRequest, handler: typing.Callable) -> aiohttp_rpc.JsonRpcResponse:
-    http_request = request.context.get('http_request')
+async def simple_middleware(request: aiohttp_rpc.JsonRpcRequest, handler: typing.Callable) -> aiohttp_rpc.JsonRpcResponse:
+    # Code to be executed for each RPC request before
+    # the method (and later middleware) are called.
 
-    if not http_request or http_request.headers.get('X-App-Token') != 'qwerty':
-        raise exceptions.InvalidRequest('Invalid token')
+    response = await handler(request)
 
-    return await handler(request)
+    # Code to be executed for each RPC request / RPC response after
+    # the method is called.
+
+    return response
 
 rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=[
      aiohttp_rpc.middlewares.exception_middleware,
-     token_middleware,
+     simple_middleware,
 ])
 ```
 
@@ -418,6 +422,23 @@ rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', zip, prepare_result=list))
 async with aiohttp_rpc.JsonRpcClient('/rpc') as rpc:
     assert await rpc.sum([1, 2, 3]) == 6
     assert await rpc.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
+```
+
+**Example with the decorator:**
+```python3
+@aiohttp_rpc.rpc_method()
+def echo(*args, **kwargs):
+    return {
+        'args': args,
+        'kwargs': kwargs,
+    }
+
+if __name__ == '__main__':
+    app = web.Application()
+    app.router.add_routes([
+        web.post('/rpc', aiohttp_rpc.rpc_server.handle_http_request),
+    ])
+    web.run_app(app, host='0.0.0.0', port=8080)
 ```
 
 [back to top](#table-of-contents)
