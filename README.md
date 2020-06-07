@@ -103,7 +103,7 @@ The purpose of this library is to simplify life, and not vice versa.
 And so, when you start adding existing functions, some problems may arise.
 
 Existing functions can return objects that are not serialized, but this is easy to fix.
-You can add own `json_serialize`:
+You can write own `json_serialize`:
 ```python3
 import aiohttp_rpc
 import typing
@@ -113,20 +113,20 @@ from dataclasses import dataclass
 from functools import partial
 
 @dataclass
-class User:
+class User:  # The object that is not serializable.
     uuid: uuid.UUID
-    id: int = 0
     username: str = 'mike'
     email: str = 'some@mail.com'
 
 async def get_user_by_uuid(user_uuid) -> User:
+    # Some function which returns not serializable object.
+    # For example, data may be taken from a database.
     return User(uuid=uuid.UUID(user_uuid))
 
 
 def json_serialize_unknown_value(value):
     if isinstance(value, User):
         return {
-            'id': value.id,
             'uuid': str(value.uuid),
             'username': value.username,
             'email': value.email,
@@ -146,7 +146,6 @@ Example of response:
     "id": null,
     "jsonrpc": "2.0",
     "result": {
-        "id": 0,
         "uuid": "600d57b3-dda8-43d0-af79-3e81dbb344fa",
         "username": "mike",
         "email": "some@mail.com"
@@ -155,9 +154,62 @@ Example of response:
 """
 ```
 
-If you need to replace the function arguments, then you can use [middleware](#middleware).
+But you can go further.
+If you want to use functions that accept custom types,
+then you can do something like this:
+```python3
+# The function that takes a custom type.
+def generate_user_token(user: User):
+    return f'token-{str(user.uuid).split("-")[0]}'
 
-If you want to add permission checking for each method, then override the class `JsonRpcMethod`.
+async def replace_type(data: typing.Any):
+    if not isinstance(data, dict) or '__type__' not in data:
+        return data
+
+    if data['__type__'] == 'user':
+        return await get_user_by_uuid(data['uuid'])
+
+    raise aiohttp_rpc.errors.InvalidParams
+
+# The middleware that converts types
+async def type_conversion_middleware(request, handler):
+    for i, arg in enumerate(request.args):
+        request.args[i] = await replace_type(arg)
+
+    for key, value in request.kwargs.items():
+        request.kwargs[key] = await replace_type(value)
+
+    return await handler(request)
+
+
+rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=[
+    aiohttp_rpc.middlewares.exception_middleware,
+    aiohttp_rpc.middlewares.extra_args_middleware,
+    type_conversion_middleware,
+])
+
+"""
+Request:
+{
+    "id": 1234,
+    "jsonrpc": "2.0",
+    "method": "generate_user_token",
+    "params": [{"__type__": "user", "uuid": "600d57b3-dda8-43d0-af79-3e81dbb344fa"}]
+}
+
+Response:
+{
+    "id": 1234,
+    "jsonrpc": "2.0",
+    "result": "token-600d57b3"
+}
+"""
+```
+
+[Middleware](#middleware) allows you to replace arguments, responses, and more.
+
+If you want to add permission checking for each method,
+then you can override the class `JsonRpcMethod` or use [middleware](#middleware).
 
 [back to top](#table-of-contents)
 
@@ -166,7 +218,7 @@ If you want to add permission checking for each method, then override the class 
 
 ## Middleware
 
-Middleware is used for request/response processing.
+Middleware is used for [RPC Request / RPC Response](#protocol) processing.
 It has a similar interface as [aiohttp middleware](https://docs.aiohttp.org/en/stable/web_advanced.html#middlewares).
 
 ```python3
@@ -174,7 +226,9 @@ import aiohttp_rpc
 import typing
 
 async def token_middleware(request: aiohttp_rpc.JsonRpcRequest, handler: typing.Callable) -> aiohttp_rpc.JsonRpcResponse:
-    if request.http_request and request.http_request.headers.get('X-App-Token') != 'qwerty':
+    http_request = request.context.get('http_request')
+
+    if not http_request or http_request.headers.get('X-App-Token') != 'qwerty':
         raise exceptions.InvalidRequest('Invalid token')
 
     return await handler(request)
@@ -292,7 +346,7 @@ loop.run_until_complete(run())
     * `def __init__(self, prefix, func, *, custom_name=None, add_extra_args=True, prepare_result=None)`
 
 ### `decorators`
-  * `def rpc_method(prefix = '', *, rpc_server=default_rpc_server, custom_name=None, add_extra_args=True)`
+  * `def rpc_method(prefix='', *, rpc_server=default_rpc_server, custom_name=None, add_extra_args=True)`
 
 ### `errors`
   * `class JsonRpcError(RuntimeError)`
@@ -351,7 +405,7 @@ rpc_server.add_methods([['new', ping_2], ping_3])  # 'new__ping2', 'ping_3'
 # Server
 import aiohttp_rpc
 
-rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=[aiohttp_rpc.middlewares.extra_args_middleware])
 rpc_server.add_method(sum)
 rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', zip, prepare_result=list))
 ...
