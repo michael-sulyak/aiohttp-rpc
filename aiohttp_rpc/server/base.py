@@ -123,12 +123,12 @@ class BaseJsonRpcServer(abc.ABC):
         return response.to_dict()
 
     @staticmethod
-    def _prepare_exceptions(values: list):
+    def _prepare_exceptions(values: list) -> None:
         for i, value in enumerate(values):
             if isinstance(value, errors.JsonRpcError):
                 values[i] = protocol.JsonRpcResponse(error=value)
             elif isinstance(value, Exception):
-                values[i] = protocol.JsonRpcResponse(error=errors.JsonRpcError(utils.get_exc_message(value)))
+                raise value
 
     async def _process_single_json_request(self,
                                            json_request: dict, *,
