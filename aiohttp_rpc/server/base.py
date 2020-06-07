@@ -5,7 +5,7 @@ from functools import partial
 
 from aiohttp import web
 
-from .. import constants, errors, middlewares as rpc_middleware, protocol, utils
+from .. import constants, errors, protocol, utils
 
 
 __all__ = (
