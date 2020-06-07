@@ -3,7 +3,7 @@ import json
 from aiohttp import web
 
 from .base import BaseJsonRpcServer
-from .. import errors, middlewares as rpc_middleware, protocol, utils
+from .. import errors, middlewares, protocol, utils
 
 
 __all__ = (
@@ -29,5 +29,5 @@ class JsonRpcServer(BaseJsonRpcServer):
 
 
 rpc_server = JsonRpcServer(
-    middlewares=rpc_middleware.DEFAULT_MIDDLEWARES,
+    middlewares=middlewares.DEFAULT_MIDDLEWARES,
 )
