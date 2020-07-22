@@ -7,6 +7,7 @@ from . import errors, protocol
 __all__ = (
     'exception_middleware',
     'extra_args_middleware',
+    'logging_middleware',
     'DEFAULT_MIDDLEWARES',
 )
 
@@ -35,6 +36,34 @@ async def exception_middleware(request: protocol.JsonRpcRequest, handler: typing
             jsonrpc=request.jsonrpc,
             error=errors.InternalError().with_traceback(),
         )
+
+    return response
+
+
+async def logging_middleware(request: protocol.JsonRpcRequest, handler: typing.Callable) -> protocol.JsonRpcResponse:
+    raw_request = request.to_dict()
+
+    logger.info(
+        'RpcRequest id="%s" method="%s" params="%s"',
+        raw_request.get('id', ''),
+        raw_request['method'],
+        raw_request.get('params', ''),
+        extra={'request': raw_request},
+    )
+
+    response = await handler(request)
+
+    raw_response = request.to_dict()
+
+    logger.info(
+        'RpcResponse id="%s" method="%s" params="%s" result="%s" error="%s"',
+        raw_request.get('id', ''),
+        raw_request['method'],
+        raw_request.get('params', ''),
+        raw_response.get('result', ''),
+        raw_response.get('error', ''),
+        extra={'request': raw_response, 'response': raw_response},
+    )
 
     return response
 
