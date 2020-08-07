@@ -1,16 +1,7 @@
-import os
-import sys
-
-import pytest
-
 import aiohttp_rpc
-
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from tests import utils
 
 
-@pytest.mark.asyncio
 async def test_args(aiohttp_client):
     def method(a=1):
         return [1, 2, a]
@@ -25,7 +16,6 @@ async def test_args(aiohttp_client):
         assert await rpc.call('method', 1) == [1, 2, 1]
 
 
-@pytest.mark.asyncio
 async def test_batch(aiohttp_client):
     def method_1(a=1):
         return [1, a]

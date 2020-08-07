@@ -1,9 +1,6 @@
-import pytest
-
 import aiohttp_rpc
 
 
-@pytest.mark.asyncio
 async def test_adding_method():
     def method():
         pass
@@ -48,7 +45,6 @@ async def test_adding_method():
     assert rpc_server.methods['method_3'].func == TestClass.method_3
 
 
-@pytest.mark.asyncio
 async def test_adding_methods():
     def method_1():
         pass

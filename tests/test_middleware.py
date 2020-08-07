@@ -1,16 +1,7 @@
-import os
-import sys
-
-import pytest
-
 import aiohttp_rpc
-
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from tests import utils
 
 
-@pytest.mark.asyncio
 async def test_middleware(aiohttp_client):
     def method():
         return 'ok'

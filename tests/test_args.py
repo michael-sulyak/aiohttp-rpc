@@ -1,18 +1,12 @@
 import functools
-import os
-import sys
 
 import pytest
 
 import aiohttp_rpc
 from aiohttp_rpc import errors
-
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from tests import utils
 
 
-@pytest.mark.asyncio
 async def test_args(aiohttp_client):
     def method(a=1):
         return [1, 2, a]
@@ -30,7 +24,6 @@ async def test_args(aiohttp_client):
         assert await rpc.call('method', 1) == [1, 2, 1]
 
 
-@pytest.mark.asyncio
 async def test_kwargs(aiohttp_client):
     def method(a=1, *, b=2):
         return [1, a, b]
@@ -53,7 +46,6 @@ async def test_kwargs(aiohttp_client):
             await rpc.call('method', 2, b=2)
 
 
-@pytest.mark.asyncio
 async def test_varargs(aiohttp_client):
     def method(a=1, *args):
         return [a, *args]
@@ -73,7 +65,6 @@ async def test_varargs(aiohttp_client):
         assert await rpc.call('method', 2, 3) == [2, 3]
 
 
-@pytest.mark.asyncio
 async def test_varkw(aiohttp_client):
     def method(a=1, **kwargs):
         return [a, kwargs]
@@ -95,7 +86,6 @@ async def test_varkw(aiohttp_client):
         assert await rpc.call('method', a=1, b=2) == [1, {'b': 2}]
 
 
-@pytest.mark.asyncio
 async def test_extra_kwargs(aiohttp_client):
     def method(rpc_request):
         return rpc_request.__class__.__name__
@@ -117,7 +107,6 @@ async def test_extra_kwargs(aiohttp_client):
         assert await rpc.call('method_2') == 'JsonRpcRequest'
 
 
-@pytest.mark.asyncio
 async def test_extra_kwargs_with_class(aiohttp_client):
     class TestClass:
         def __init__(self, rpc_request):
@@ -135,7 +124,6 @@ async def test_extra_kwargs_with_class(aiohttp_client):
         assert await rpc.call('TestClass') == 'JsonRpcRequest'
 
 
-@pytest.mark.asyncio
 async def test_extra_kwargs_with_wrapper(aiohttp_client):
     def test_decorator(func):
         @functools.wraps(func)
@@ -162,7 +150,6 @@ async def test_extra_kwargs_with_wrapper(aiohttp_client):
         assert await rpc.call('method_2') is True
 
 
-@pytest.mark.asyncio
 async def test_builtin_funcs(aiohttp_client):
     rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
     rpc_server.add_method(sum)
