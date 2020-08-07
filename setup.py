@@ -25,7 +25,7 @@ if __name__ == '__main__':
         long_description=long_description,
         long_description_content_type='text/markdown',
         python_requires='>=3.6.5',
-        packages=find_packages(),
+        packages=find_packages(exclude=['tests']),
         classifiers=[
             # 'Development Status :: 1 - Planning',
             # 'Development Status :: 2 - Pre-Alpha',
