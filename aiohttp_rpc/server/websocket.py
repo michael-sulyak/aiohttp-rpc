@@ -27,7 +27,7 @@ class WsJsonRpcServer(BaseJsonRpcServer):
         return await self.handle_websocket_request(http_request)
 
     async def handle_websocket_request(self, http_request: web.Request) -> web_ws.WebSocketResponse:
-        ws = web.WebSocketResponse()
+        ws = web_ws.WebSocketResponse()
         await ws.prepare(http_request)
 
         self.rcp_websockets.add(ws)
