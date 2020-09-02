@@ -15,7 +15,7 @@ __all__ = (
 class JsonRpcServer(BaseJsonRpcServer):
     async def handle_http_request(self, http_request: web.Request) -> web.Response:
         if http_request.method != 'POST':
-            return web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('POST',))
+            raise web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('POST',))
 
         try:
             input_data = await http_request.json()

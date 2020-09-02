@@ -22,7 +22,7 @@ class WsJsonRpcServer(BaseJsonRpcServer):
 
     async def handle_http_request(self, http_request: web.Request) -> web.StreamResponse:
         if http_request.method != 'GET' or http_request.headers.get('upgrade', '').lower() != 'websocket':
-            return web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('POST',))
+            raise web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('GET',))
 
         return await self.handle_websocket_request(http_request)
 
