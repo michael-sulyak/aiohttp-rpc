@@ -29,6 +29,10 @@ build:
       environment:
         python: 3.8.0
 
+    py39:
+      environment:
+        python: 3.9.0
+
       tests:
         override:
           - tox
