@@ -6,6 +6,7 @@ from .. import constants, errors, utils
 
 __all__ = (
     'JsonRpcRequest',
+    'JsonRpcBatchRequest',
 )
 
 
@@ -39,7 +40,7 @@ class JsonRpcRequest:
 
     @property
     def is_notification(self) -> bool:
-        return self.msg_id is constants.NOTHING
+        return self.msg_id in constants.EMPTY_VALUES
 
     @classmethod
     def from_dict(cls, data: typing.Dict[str, typing.Any], **kwargs) -> 'JsonRpcRequest':
@@ -76,3 +77,11 @@ class JsonRpcRequest:
             raise errors.InvalidRequest('A request must contain "method" and "jsonrpc".')
 
         utils.validate_jsonrpc(data['jsonrpc'])
+
+
+@dataclass
+class JsonRpcBatchRequest:
+    requests: typing.List[JsonRpcRequest] = field(default_factory=list)
+
+    def to_list(self) -> typing.List[dict]:
+        return [request.to_dict() for request in self.requests]

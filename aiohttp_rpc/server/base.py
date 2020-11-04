@@ -106,20 +106,28 @@ class BaseJsonRpcServer(abc.ABC):
 
     async def _process_input_data(self,
                                   data: typing.Union[dict, list], *,
-                                  http_request: typing.Optional[web.Request] = None) -> typing.Any:
+                                  context: typing.Dict[str, typing.Any],
+                                  ) -> typing.Optional[typing.Union[dict, typing.List[dict]]]:
         if isinstance(data, list):
+            if not data:
+                return protocol.JsonRpcResponse(error=errors.InvalidRequest()).to_dict()
+
             coros = (
-                self._process_single_json_request(raw_rcp_request, http_request=http_request)
+                self._process_single_json_request(raw_rcp_request, context=context)
                 for raw_rcp_request in data
             )
             json_responses = await asyncio.gather(*coros, return_exceptions=True)
             self._prepare_exceptions(json_responses)
-            return json_responses
+            return [
+                json_response
+                for json_response in json_responses
+                if json_response is not None
+            ]
 
         if isinstance(data, dict):
-            return await self._process_single_json_request(data, http_request=http_request)
+            return await self._process_single_json_request(data, context=context)
 
-        response = protocol.JsonRpcResponse(error=errors.ParseError('Data must be a dict or an list.'))
+        response = protocol.JsonRpcResponse(error=errors.InvalidRequest('Data must be a dict or an list.'))
         return response.to_dict()
 
     @staticmethod
@@ -132,19 +140,22 @@ class BaseJsonRpcServer(abc.ABC):
 
     async def _process_single_json_request(self,
                                            json_request: dict, *,
-                                           http_request: typing.Optional[web.Request] = None) -> dict:
-        if not isinstance(json_request, dict):
-            raise errors.ParseError('Data must be a dict or an list.')
-
-        msg_id = json_request.get('id')
-
+                                           context: typing.Dict[str, typing.Any]) -> typing.Optional[dict]:
         try:
-            request = protocol.JsonRpcRequest.from_dict(json_request, context={'http_request': http_request})
+            if not isinstance(json_request, dict):
+                raise errors.InvalidRequest('Data must be a dict.')
+
+            request = protocol.JsonRpcRequest.from_dict(json_request, context=context)
         except errors.JsonRpcError as e:
+            msg_id = json_request.get('id', constants.NOTHING) if isinstance(json_request, dict) else constants.NOTHING
             response = protocol.JsonRpcResponse(msg_id=msg_id, error=e)
             return response.to_dict()
 
         response = await self._middleware_chain(request)
+
+        if response.is_notification:
+            return None
+
         return response.to_dict()
 
     async def _process_single_request(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:

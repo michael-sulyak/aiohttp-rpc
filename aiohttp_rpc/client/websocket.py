@@ -4,6 +4,7 @@ import logging
 import typing
 
 import aiohttp
+from aiohttp import web_ws
 
 from .base import BaseJsonRpcClient
 from .. import errors, utils
@@ -11,6 +12,7 @@ from .. import errors, utils
 
 __all__ = (
     'WsJsonRpcClient',
+    'WsJsonRpcClientForResponse',
 )
 
 logger = logging.getLogger(__name__)
@@ -84,7 +86,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         return result, None
 
     def clear_pending(self) -> None:
-        self._pending = {}
+        self._pending.clear()
 
     @staticmethod
     def _get_msg_ids_from_json(data: typing.Any) -> typing.Optional[list]:
@@ -139,7 +141,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         for future in self._pending.values():
             future.set_exception(error)
 
-        self._pending = {}
+        self.clear_pending()
 
     def _notify_about_result(self, msg_id: typing.Any, json_response: dict) -> None:
         future = self._pending.pop(msg_id, None)
@@ -156,3 +158,30 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             if future and not is_processed:
                 future.set_result(json_response)
                 is_processed = True
+
+
+class WsJsonRpcClientForResponse(BaseJsonRpcClient):
+    ws_response: web_ws.WebSocketResponse
+
+    def __init__(self, ws_response: web_ws.WebSocketResponse) -> None:
+        self.ws_response = ws_response
+
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def send_json(self,
+                        data: typing.Any, *,
+                        without_response: bool = False) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
+        assert without_response
+
+        await self.ws_response.send_str(self.json_serialize(data))
+        return None, None
+
+    async def direct_call(self, *args, **kwargs):
+        raise NotImplementedError
+
+    async def direct_batch(self, *args, **kwargs):
+        raise NotImplementedError

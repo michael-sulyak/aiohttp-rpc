@@ -23,7 +23,7 @@ class JsonRpcServer(BaseJsonRpcServer):
             response = protocol.JsonRpcResponse(error=errors.ParseError(utils.get_exc_message(e)))
             return web.json_response(response.to_dict(), dumps=self.json_serialize)
 
-        output_data = await self._process_input_data(input_data, http_request=http_request)
+        output_data = await self._process_input_data(input_data, context={'http_request': http_request})
 
         return web.json_response(output_data, dumps=self.json_serialize)
 

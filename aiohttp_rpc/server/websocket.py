@@ -5,6 +5,7 @@ import weakref
 from aiohttp import http_websocket, web, web_ws
 
 from .base import BaseJsonRpcServer
+from .. import errors
 
 
 __all__ = (
@@ -35,7 +36,7 @@ class WsJsonRpcServer(BaseJsonRpcServer):
         async for ws_msg in ws:
             if ws_msg.type == http_websocket.WSMsgType.TEXT:
                 coro = self._handle_ws_msg(
-                    ws=ws,
+                    ws_response=ws,
                     http_request=http_request,
                     ws_msg=ws_msg,
                 )
@@ -54,11 +55,19 @@ class WsJsonRpcServer(BaseJsonRpcServer):
         self.rcp_websockets.clear()
 
     async def _handle_ws_msg(self, *,
-                             ws: web_ws.WebSocketResponse,
+                             ws_response: web_ws.WebSocketResponse,
                              http_request: web.Request,
                              ws_msg: web_ws.WSMessage) -> None:
         input_data = json.loads(ws_msg.data)
-        output_data = await self._process_input_data(input_data, http_request=http_request)
+        output_data = await self._process_input_data(input_data, context={
+            'http_request': http_request,
+            'ws_response': ws_response,
+        })
 
-        if not ws.closed:
-            await ws.send_str(self.json_serialize(output_data))
+        if output_data is None:
+            return
+
+        if ws_response.closed:
+            raise errors.ServerError('WS is closed.')
+
+        await ws_response.send_str(self.json_serialize(output_data))

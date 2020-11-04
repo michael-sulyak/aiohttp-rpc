@@ -6,6 +6,7 @@ from .. import constants, errors, utils
 
 __all__ = (
     'JsonRpcResponse',
+    'JsonRpcBatchResponse',
 )
 
 
@@ -19,7 +20,7 @@ class JsonRpcResponse:
 
     @property
     def is_notification(self) -> bool:
-        return self.msg_id is constants.NOTHING
+        return self.msg_id in constants.EMPTY_VALUES
 
     @classmethod
     def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcResponse':
@@ -38,10 +39,12 @@ class JsonRpcResponse:
         return response
 
     def to_dict(self) -> typing.Optional[dict]:
-        if self.msg_id is constants.NOTHING:
-            return None
+        data = {'jsonrpc': self.jsonrpc}
 
-        data = {'id': self.msg_id, 'jsonrpc': self.jsonrpc}
+        if self.msg_id in constants.EMPTY_VALUES:
+            data['id'] = None
+        else:
+            data['id'] = self.msg_id
 
         if self.error is constants.NOTHING:
             data['result'] = self.result
@@ -81,3 +84,20 @@ class JsonRpcResponse:
             data=error.get('data'),
             code=error['code'],
         )
+
+
+@dataclass
+class JsonRpcBatchResponse:
+    responses: typing.List[JsonRpcResponse] = field(default_factory=list)
+
+    def to_list(self) -> typing.List[dict]:
+        return [response.to_dict() for response in self.responses]
+
+    @classmethod
+    def from_list(cls, data: list, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcBatchResponse':
+        responses = [
+            JsonRpcResponse.from_dict(item, error_map=error_map, **kwargs)
+            for item in data
+        ]
+
+        return cls(responses=responses)

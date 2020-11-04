@@ -5,8 +5,7 @@ import uuid
 from dataclasses import dataclass
 from functools import partial
 
-from .. import constants, errors, utils
-from ..protocol import JsonRpcRequest, JsonRpcResponse
+from .. import constants, errors, protocol, utils
 
 
 __all__ = (
@@ -41,45 +40,41 @@ class BaseJsonRpcClient(abc.ABC):
         pass
 
     async def call(self, method: str, *args, **kwargs) -> typing.Any:
-        request = JsonRpcRequest(msg_id=str(uuid.uuid4()), method=method, args=args, kwargs=kwargs)
+        request = protocol.JsonRpcRequest(msg_id=str(uuid.uuid4()), method=method, args=args, kwargs=kwargs)
         response = await self.direct_call(request)
 
-        if response.error:
+        if response.error not in constants.EMPTY_VALUES:
             raise response.error
 
         return response.result
 
     async def notify(self, method: str, *args, **kwargs) -> None:
-        request = JsonRpcRequest(method=method, args=args, kwargs=kwargs)
+        request = protocol.JsonRpcRequest(method=method, args=args, kwargs=kwargs)
         await self.send_json(request.to_dict(), without_response=True)
 
     async def batch(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> typing.Any:
-        requests = [self._parse_batch_method(method) for method in methods]
-        responses = await self.direct_batch(requests)
-        return self._collect_batch_result(requests, responses)
+        batch_request = protocol.JsonRpcBatchRequest(requests=[self._parse_batch_method(method) for method in methods])
+        batch_response = await self.direct_batch(batch_request)
+        return self._collect_batch_result(batch_request, batch_response)
 
     async def batch_notify(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> None:
-        requests = [self._parse_batch_method(method, is_notification=True) for method in methods]
-        data = [request.to_dict() for request in requests]
-        await self.send_json(data, without_response=True)
+        batch_request = protocol.JsonRpcBatchRequest(
+            requests=[self._parse_batch_method(method, is_notification=True) for method in methods],
+        )
+        await self.send_json(batch_request.to_list(), without_response=True)
 
-    async def direct_call(self, request: JsonRpcRequest) -> JsonRpcResponse:
+    async def direct_call(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
         json_response, context = await self.send_json(request.to_dict())
-        response = JsonRpcResponse.from_dict(
+        response = protocol.JsonRpcResponse.from_dict(
             json_response,
             error_map=self.error_map,
             context=context,
         )
         return response
 
-    async def direct_batch(self, requests: typing.List[JsonRpcRequest]) -> typing.List[JsonRpcResponse]:
-        data = [request.to_dict() for request in requests]
-        json_response, context = await self.send_json(data)
-
-        return [
-            JsonRpcResponse.from_dict(item, error_map=self.error_map, context=context)
-            for item in json_response
-        ]
+    async def direct_batch(self, batch_request: protocol.JsonRpcBatchRequest) -> protocol.JsonRpcBatchResponse:
+        json_response, context = await self.send_json(batch_request.to_list())
+        return protocol.JsonRpcBatchResponse.from_list(json_response)
 
     @abc.abstractmethod
     async def send_json(self,
@@ -91,11 +86,12 @@ class BaseJsonRpcClient(abc.ABC):
         return partial(self.call, method)
 
     @staticmethod
-    def _collect_batch_result(requests: typing.List[JsonRpcRequest], responses: typing.List[JsonRpcResponse]) -> list:
+    def _collect_batch_result(batch_request: protocol.JsonRpcBatchRequest,
+                              batch_response: protocol.JsonRpcBatchResponse) -> list:
         unlinked_results = UnlinkedResults(data=[])
         responses_map = {}
 
-        for response in responses:
+        for response in batch_response.responses:
             value = response.error or response.result
 
             if response.msg_id in constants.EMPTY_VALUES:
@@ -107,8 +103,8 @@ class BaseJsonRpcClient(abc.ABC):
         unlinked_results = unlinked_results.compile()
         result = []
 
-        for request in requests:
-            if request.msg_id in constants.EMPTY_VALUES:
+        for request in batch_request.requests:
+            if request.is_notification:
                 result.append(unlinked_results)
                 continue
 
@@ -118,20 +114,35 @@ class BaseJsonRpcClient(abc.ABC):
 
     @staticmethod
     def _parse_batch_method(batch_method: typing.Union[str, list, tuple], *,
-                            is_notification: bool = False) -> JsonRpcRequest:
+                            is_notification: bool = False) -> protocol.JsonRpcRequest:
         msg_id = constants.NOTHING if is_notification else str(uuid.uuid4())
 
         if isinstance(batch_method, str):
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method)
+            return protocol.JsonRpcRequest(
+                msg_id=msg_id,
+                method=batch_method,
+            )
 
         if len(batch_method) == 1:
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0])
+            return protocol.JsonRpcRequest(
+                msg_id=msg_id,
+                method=batch_method[0],
+            )
 
         if len(batch_method) == 2:
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0], params=batch_method[1])
+            return protocol.JsonRpcRequest(
+                msg_id=msg_id,
+                method=batch_method[0],
+                params=batch_method[1],
+            )
 
         if len(batch_method) == 3:
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0], args=batch_method[1], kwargs=batch_method[2])
+            return protocol.JsonRpcRequest(
+                msg_id=msg_id,
+                method=batch_method[0],
+                args=batch_method[1],
+                kwargs=batch_method[2],
+            )
 
         raise errors.InvalidParams('Use string or list (length less than or equal to 3).')
 
