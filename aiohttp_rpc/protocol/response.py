@@ -7,6 +7,8 @@ from .. import constants, errors, utils
 __all__ = (
     'JsonRpcResponse',
     'JsonRpcBatchResponse',
+    'UnlinkedResults',
+    'DuplicatedResults',
 )
 
 
@@ -46,7 +48,7 @@ class JsonRpcResponse:
         else:
             data['id'] = self.msg_id
 
-        if self.error is constants.NOTHING:
+        if self.error in constants.EMPTY_VALUES:
             data['result'] = self.result
         else:
             data['error'] = {'code': self.error.code, 'message': self.error.message}
@@ -101,3 +103,31 @@ class JsonRpcBatchResponse:
         ]
 
         return cls(responses=responses)
+
+
+@dataclass
+class UnlinkedResults:
+    data: list = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return len(self.data) > 0
+
+    def get(self) -> list:
+        return self.data
+
+    def add(self, value: typing.Any) -> None:
+        self.data.append(value)
+
+
+@dataclass
+class DuplicatedResults:
+    data: list = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return len(self.data) > 0
+
+    def get(self) -> list:
+        return self.data
+
+    def add(self, value: typing.Any) -> None:
+        self.data.append(value)

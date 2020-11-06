@@ -21,7 +21,7 @@ class JsonRpcRequest:
     args: typing.Optional[typing.Union[list, tuple]] = None
     kwargs: typing.Optional[dict] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         utils.validate_jsonrpc(self.jsonrpc)
 
         if self.params is constants.NOTHING:

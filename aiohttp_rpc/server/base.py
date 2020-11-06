@@ -3,8 +3,6 @@ import asyncio
 import typing
 from functools import partial
 
-from aiohttp import web
-
 from .. import constants, errors, protocol, utils
 
 
@@ -36,7 +34,7 @@ class BaseJsonRpcServer(abc.ABC):
 
         self.json_serialize = json_serialize
 
-    def load_middlewares(self):
+    def load_middlewares(self) -> None:
         self._middleware_chain = self._process_single_request
 
         for middleware in reversed(self.middlewares):
@@ -118,11 +116,8 @@ class BaseJsonRpcServer(abc.ABC):
             )
             json_responses = await asyncio.gather(*coros, return_exceptions=True)
             self._prepare_exceptions(json_responses)
-            return [
-                json_response
-                for json_response in json_responses
-                if json_response is not None
-            ]
+            result = [json_response for json_response in json_responses if json_response is not None]
+            return result if result else None
 
         if isinstance(data, dict):
             return await self._process_single_json_request(data, context=context)

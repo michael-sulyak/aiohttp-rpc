@@ -2,13 +2,18 @@ import abc
 import asyncio
 import inspect
 import typing
+from dataclasses import dataclass
 
-from .. import errors, utils
+from .. import constants, errors, utils
 
+
+if typing.TYPE_CHECKING:
+    from . import request
 
 __all__ = (
     'BaseJsonRpcMethod',
     'JsonRpcMethod',
+    'CalledJsonRpcMethod',
 )
 
 
@@ -147,3 +152,40 @@ class JsonRpcMethod(BaseJsonRpcMethod):
                 inspect.signature(self.func).bind(*args, **kwargs)
         except TypeError as e:
             raise errors.InvalidParams(utils.get_exc_message(e)) from e
+
+
+@dataclass
+class CalledJsonRpcMethod:
+    name: str
+    args: typing.Optional[typing.Union[list, tuple]] = None
+    kwargs: typing.Optional[dict] = None
+    msg_id: typing.Any = constants.NOTHING
+    params: typing.Any = constants.NOTHING
+    is_notification: bool = False
+
+    @classmethod
+    def from_params(cls, params: typing.Union[str, list, tuple]) -> 'CalledJsonRpcMethod':
+        if isinstance(params, str):
+            return cls(name=params)
+
+        if len(params) == 1:
+            return cls(name=params[0])
+
+        if len(params) == 2:
+            return cls(name=params[0], params=params[1])
+
+        if len(params) == 3:
+            return cls(name=params[0], args=params[1], kwargs=params[2])
+
+        raise errors.InvalidParams('Use string or list (length less than or equal to 3).')
+
+    def to_request(self) -> 'request.JsonRpcRequest':
+        from .request import JsonRpcRequest
+
+        return JsonRpcRequest(
+            msg_id=self.msg_id,
+            method=self.name,
+            args=self.args,
+            kwargs=self.kwargs,
+            params=self.params,
+        )

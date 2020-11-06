@@ -1,8 +1,6 @@
 import abc
 import types
 import typing
-import uuid
-from dataclasses import dataclass
 from functools import partial
 
 from .. import constants, errors, protocol, utils
@@ -10,8 +8,9 @@ from .. import constants, errors, protocol, utils
 
 __all__ = (
     'BaseJsonRpcClient',
-    'UnlinkedResults',
 )
+
+MethodType = typing.Union[str, list, tuple, protocol.CalledJsonRpcMethod]
 
 
 class BaseJsonRpcClient(abc.ABC):
@@ -31,6 +30,9 @@ class BaseJsonRpcClient(abc.ABC):
                         traceback: typing.Optional[types.TracebackType]) -> None:
         await self.disconnect()
 
+    def __getattr__(self, method) -> typing.Callable:
+        return partial(self.call, method)
+
     @abc.abstractmethod
     async def connect(self) -> None:
         pass
@@ -40,7 +42,7 @@ class BaseJsonRpcClient(abc.ABC):
         pass
 
     async def call(self, method: str, *args, **kwargs) -> typing.Any:
-        request = protocol.JsonRpcRequest(msg_id=str(uuid.uuid4()), method=method, args=args, kwargs=kwargs)
+        request = protocol.JsonRpcRequest(msg_id=utils.get_random_msg_id(), method=method, args=args, kwargs=kwargs)
         response = await self.direct_call(request)
 
         if response.error not in constants.EMPTY_VALUES:
@@ -50,30 +52,58 @@ class BaseJsonRpcClient(abc.ABC):
 
     async def notify(self, method: str, *args, **kwargs) -> None:
         request = protocol.JsonRpcRequest(method=method, args=args, kwargs=kwargs)
-        await self.send_json(request.to_dict(), without_response=True)
+        await self.direct_call(request, without_response=True)
 
-    async def batch(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> typing.Any:
-        batch_request = protocol.JsonRpcBatchRequest(requests=[self._parse_batch_method(method) for method in methods])
+    async def batch(self,
+                    methods: typing.Iterable[MethodType], *,
+                    save_order: bool = True) -> typing.Any:
+        requests = [self._parse_method(method) for method in methods]
+        batch_request = protocol.JsonRpcBatchRequest(requests=requests)
         batch_response = await self.direct_batch(batch_request)
-        return self._collect_batch_result(batch_request, batch_response)
 
-    async def batch_notify(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> None:
-        batch_request = protocol.JsonRpcBatchRequest(
-            requests=[self._parse_batch_method(method, is_notification=True) for method in methods],
-        )
-        await self.send_json(batch_request.to_list(), without_response=True)
+        if save_order:
+            return self._collect_batch_result(batch_request, batch_response)
+        else:
+            return [
+                response.result if response.error in constants.EMPTY_VALUES else response.error
+                for response in batch_response.responses
+            ]
 
-    async def direct_call(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
-        json_response, context = await self.send_json(request.to_dict())
+    async def batch_notify(self, methods: typing.Iterable[MethodType]) -> None:
+        requests = [self._parse_method(method, is_notification=True) for method in methods]
+        batch_request = protocol.JsonRpcBatchRequest(requests=requests)
+        await self.direct_batch(batch_request, without_response=True)
+
+    async def direct_call(self,
+                          request: protocol.JsonRpcRequest, *,
+                          without_response: bool = False) -> typing.Optional[protocol.JsonRpcResponse]:
+        json_response, context = await self.send_json(request.to_dict(), without_response=without_response)
+
+        if without_response:
+            return None
+
         response = protocol.JsonRpcResponse.from_dict(
             json_response,
             error_map=self.error_map,
             context=context,
         )
+
         return response
 
-    async def direct_batch(self, batch_request: protocol.JsonRpcBatchRequest) -> protocol.JsonRpcBatchResponse:
-        json_response, context = await self.send_json(batch_request.to_list())
+    async def direct_batch(self,
+                           batch_request: protocol.JsonRpcBatchRequest, *,
+                           without_response: bool = False) -> typing.Optional[protocol.JsonRpcBatchResponse]:
+        if not batch_request.requests:
+            raise errors.InvalidRequest('You can not send an empty batch request.')
+
+        json_response, context = await self.send_json(batch_request.to_list(), without_response=without_response)
+
+        if without_response:
+            return None
+
+        if not json_response:
+            raise errors.ParseError('Server returned an empty batch response.')
+
         return protocol.JsonRpcBatchResponse.from_list(json_response)
 
     @abc.abstractmethod
@@ -82,25 +112,36 @@ class BaseJsonRpcClient(abc.ABC):
                         without_response: bool = False) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         pass
 
-    def __getattr__(self, method) -> typing.Callable:
-        return partial(self.call, method)
-
     @staticmethod
     def _collect_batch_result(batch_request: protocol.JsonRpcBatchRequest,
                               batch_response: protocol.JsonRpcBatchResponse) -> list:
-        unlinked_results = UnlinkedResults(data=[])
+        unlinked_results = protocol.UnlinkedResults()
         responses_map = {}
 
         for response in batch_response.responses:
-            value = response.error or response.result
+            if response.error in constants.EMPTY_VALUES:
+                value = response.result
+            else:
+                value = response.error
 
             if response.msg_id in constants.EMPTY_VALUES:
-                unlinked_results.data.append(value)
+                unlinked_results.add(value)
                 continue
+
+            if response.msg_id in responses_map:
+                if isinstance(responses_map[response.msg_id], protocol.DuplicatedResults):
+                    responses_map[response.msg_id].add(value)
+                else:
+                    responses_map[response.msg_id] = protocol.DuplicatedResults(data=[
+                        responses_map[response.msg_id],
+                        value,
+                    ])
 
             responses_map[response.msg_id] = value
 
-        unlinked_results = unlinked_results.compile()
+        if not unlinked_results:
+            unlinked_results = None
+
         result = []
 
         for request in batch_request.requests:
@@ -113,49 +154,14 @@ class BaseJsonRpcClient(abc.ABC):
         return result
 
     @staticmethod
-    def _parse_batch_method(batch_method: typing.Union[str, list, tuple], *,
-                            is_notification: bool = False) -> protocol.JsonRpcRequest:
-        msg_id = constants.NOTHING if is_notification else str(uuid.uuid4())
+    def _parse_method(method: MethodType, *, is_notification: bool = False) -> protocol.JsonRpcRequest:
+        if isinstance(method, protocol.CalledJsonRpcMethod):
+            called_method = method
+        else:
+            called_method = protocol.CalledJsonRpcMethod.from_params(method)
+            called_method.is_notification = is_notification
 
-        if isinstance(batch_method, str):
-            return protocol.JsonRpcRequest(
-                msg_id=msg_id,
-                method=batch_method,
-            )
+        if called_method.msg_id in constants.EMPTY_VALUES and not called_method.is_notification:
+            called_method.msg_id = utils.get_random_msg_id()
 
-        if len(batch_method) == 1:
-            return protocol.JsonRpcRequest(
-                msg_id=msg_id,
-                method=batch_method[0],
-            )
-
-        if len(batch_method) == 2:
-            return protocol.JsonRpcRequest(
-                msg_id=msg_id,
-                method=batch_method[0],
-                params=batch_method[1],
-            )
-
-        if len(batch_method) == 3:
-            return protocol.JsonRpcRequest(
-                msg_id=msg_id,
-                method=batch_method[0],
-                args=batch_method[1],
-                kwargs=batch_method[2],
-            )
-
-        raise errors.InvalidParams('Use string or list (length less than or equal to 3).')
-
-
-@dataclass
-class UnlinkedResults:
-    data: list
-
-    def compile(self) -> typing.Any:
-        if not self.data:
-            return None
-
-        if len(self.data) == 1:
-            return self.data[0]
-
-        return self
+        return called_method.to_request()

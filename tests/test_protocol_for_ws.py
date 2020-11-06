@@ -1,4 +1,5 @@
 # https://www.jsonrpc.org/specification#examples
+import asyncio
 
 import pytest
 
@@ -19,12 +20,12 @@ async def test_rpc_call_with_positional_parameters(aiohttp_client):
     def subtract(a, b):
         return a - b
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
     rpc_server.add_method(subtract)
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.subtract(42, 23) == 19
         assert await rpc.subtract(23, 42) == -19
 
@@ -47,12 +48,12 @@ async def test_rpc_call_with_named_parameters(aiohttp_client):
     def subtract(*, subtrahend, minuend):
         return minuend - subtrahend
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
     rpc_server.add_method(subtract)
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.subtract(subtrahend=23, minuend=42) == 19
         assert await rpc.subtract(minuend=42, subtrahend=23) == 19
 
@@ -79,13 +80,13 @@ async def test_notification(aiohttp_client):
     def foobar(*args):
         return 'ok'
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
     rpc_server.add_method(update)
     rpc_server.add_method(foobar)
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.notify('update', subtrahend=23, minuend=42) is None
         assert await rpc.notify('foobar', minuend=42, subtrahend=23) is None
 
@@ -102,11 +103,10 @@ async def test_rpc_call_of_non_existent_method(aiohttp_client):
     <-- {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": "1"}
     """
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
-
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         with pytest.raises(errors.MethodNotFound):
             assert await rpc.call('foobar', subtrahend=23, minuend=42)
 
@@ -116,65 +116,98 @@ async def test_rpc_call_of_non_existent_method(aiohttp_client):
         }
 
 
-async def test_rpc_call_with_invalid_json(aiohttp_client):
+async def test_rpc_call_with_invalid_json(aiohttp_client, mocker):
     """
     --> {"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]
     <-- {"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}, "id": null}
     """
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        http_response = await rpc.session.post(
-            rpc.url,
-            data='{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]',
-        )
-        json_response = await http_response.json()
+    future = asyncio.Future()
+
+    def unprocessed_json_response_handler(*, ws_connect, ws_msg, json_response):
+        future.set_result(json_response)
         del json_response['error']['message']
-
         assert json_response == {'jsonrpc': '2.0', 'error': {'code': -32700}, 'id': None}
 
+    async with aiohttp_rpc.WsJsonRpcClient(
+            '/rpc',
+            session=client,
+            unprocessed_json_response_handler=unprocessed_json_response_handler,
+    ) as rpc:
+        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
+        rpc.json_serialize = lambda x: x
+        result = await rpc.send_json('{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]')
+        assert result == (None, None,)
+        await asyncio.wait_for(future, timeout=3)
+        handle_ws_message.assert_called_once()
 
-async def test_rpc_call_with_an_empty_array(aiohttp_client):
+
+async def test_rpc_call_with_an_empty_array(aiohttp_client, mocker):
     """
     --> []
     <-- {"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid Request"}, "id": null}
     """
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        with pytest.raises(errors.InvalidRequest):
-            await rpc.batch([])
+    future = asyncio.Future()
 
-        result = await rpc.send_json([])
-        assert result[0] == {
+    def unprocessed_json_response_handler(*, ws_connect, ws_msg, json_response):
+        future.set_result(json_response)
+        assert json_response == {
             'jsonrpc': '2.0', 'error': {'code': -32600, 'message': errors.InvalidRequest.message}, 'id': None,
         }
 
+    async with aiohttp_rpc.WsJsonRpcClient(
+            '/rpc',
+            session=client,
+            unprocessed_json_response_handler=unprocessed_json_response_handler,
+    ) as rpc:
+        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
 
-async def test_rpc_call_with_an_invalid_batch(aiohttp_client):
+        with pytest.raises(errors.InvalidRequest):
+            await rpc.batch([])
+
+        handle_ws_message.assert_not_called()
+        await rpc.send_json([])
+        await asyncio.wait_for(future, timeout=3)
+        handle_ws_message.assert_called_once()
+
+
+async def test_rpc_call_with_an_invalid_batch(aiohttp_client, mocker):
     """
     --> [1]
     <-- {"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid Request"}, "id": null}
     """
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
+    future = asyncio.Future()
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
-
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        result = await rpc.send_json([1])
-        assert result[0] == [{
+    def unprocessed_json_response_handler(*, ws_connect, ws_msg, json_response):
+        future.set_result(json_response)
+        assert json_response == {
             'jsonrpc': '2.0', 'error': {'code': -32600, 'message': 'Data must be a dict.'}, 'id': None,
-        }]
+        }
+
+    async with aiohttp_rpc.WsJsonRpcClient(
+            '/rpc',
+            session=client,
+            unprocessed_json_response_handler=unprocessed_json_response_handler,
+    ) as rpc:
+        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
+        await rpc.send_json([1])
+        await asyncio.wait_for(future, timeout=3)
+        handle_ws_message.assert_called_once()
 
 
-async def test_rpc_call_with_invalid_batch(aiohttp_client):
+async def test_rpc_call_with_invalid_batch(aiohttp_client, mocker):
     """
     --> [1,2,3]
     <-- [
@@ -184,17 +217,27 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client):
     ]
     """
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
-
-    client = await utils.make_client(aiohttp_client, rpc_server)
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
+    future = asyncio.Future()
 
     json_with_error = {
         'jsonrpc': '2.0', 'error': {'code': -32600, 'message': 'Data must be a dict or an list.'}, 'id': None,
     }
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        result = await rpc.send_json([1, 2, 3])
-        assert result[0] == [json_with_error, json_with_error, json_with_error]
+    def unprocessed_json_response_handler(*, ws_connect, ws_msg, json_response):
+        future.set_result(json_response)
+        assert json_response == [json_with_error, json_with_error, json_with_error]
+
+    async with aiohttp_rpc.WsJsonRpcClient(
+            '/rpc',
+            session=client,
+            unprocessed_json_response_handler=unprocessed_json_response_handler,
+    ) as rpc:
+        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
+        await rpc.send_json([1, 2, 3])
+        await asyncio.wait_for(future, timeout=3)
+        handle_ws_message.assert_called_once()
 
 
 async def test_rpc_call_with_invalid_batch(aiohttp_client):
@@ -228,13 +271,13 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client):
     def my_sum(*args):
         return sum(args)
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.WsJsonRpcServer()
     rpc_server.add_method(subtract)
     rpc_server.add_method((aiohttp_rpc.JsonRpcMethod(prefix='', func=my_sum, custom_name='sum')))
     rpc_server.add_method(notify_hello)
     rpc_server.add_method(get_data)
 
-    client = await utils.make_client(aiohttp_client, rpc_server)
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
     called_methods = [
         aiohttp_rpc.CalledJsonRpcMethod(msg_id=1, name='sum', params=[1, 2, 4]),
@@ -244,7 +287,7 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client):
         aiohttp_rpc.CalledJsonRpcMethod(msg_id=9, name='get_data'),
     ]
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.batch(called_methods) == [7, None, 19, errors.MethodNotFound(), ['hello', 5]]
         assert await rpc.batch(called_methods, save_order=False) == [7, 19, errors.MethodNotFound(), ['hello', 5]]
 

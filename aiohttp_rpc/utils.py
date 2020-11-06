@@ -1,5 +1,6 @@
 import json
 import typing
+import uuid
 from functools import partial
 from traceback import format_exception_only
 
@@ -50,6 +51,10 @@ def parse_args_and_kwargs(args: typing.Any, kwargs: typing.Any) -> typing.Tuple:
 
     kwargs = dict(kwargs)
     return kwargs, [], kwargs
+
+
+def get_random_msg_id() -> str:
+    return str(uuid.uuid4())
 
 
 def get_exc_message(exp: Exception) -> str:
