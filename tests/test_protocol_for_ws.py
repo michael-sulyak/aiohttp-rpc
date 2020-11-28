@@ -138,7 +138,11 @@ async def test_rpc_call_with_invalid_json(aiohttp_client, mocker):
             session=client,
             unprocessed_json_response_handler=unprocessed_json_response_handler,
     ) as rpc:
-        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
+        handle_ws_message = mocker.patch.object(
+            rpc,
+            '_handle_single_ws_message',
+            side_effect=rpc._handle_single_ws_message,
+        )
         rpc.json_serialize = lambda x: x
         result = await rpc.send_json('{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]')
         assert result == (None, None,)
@@ -169,7 +173,11 @@ async def test_rpc_call_with_an_empty_array(aiohttp_client, mocker):
             session=client,
             unprocessed_json_response_handler=unprocessed_json_response_handler,
     ) as rpc:
-        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
+        handle_ws_message = mocker.patch.object(
+            rpc,
+            '_handle_single_ws_message',
+            side_effect=rpc._handle_single_ws_message,
+        )
 
         with pytest.raises(errors.InvalidRequest):
             await rpc.batch([])
@@ -201,7 +209,11 @@ async def test_rpc_call_with_an_invalid_batch(aiohttp_client, mocker):
             session=client,
             unprocessed_json_response_handler=unprocessed_json_response_handler,
     ) as rpc:
-        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
+        handle_ws_message = mocker.patch.object(
+            rpc,
+            '_handle_single_ws_message',
+            side_effect=rpc._handle_single_ws_message,
+        )
         await rpc.send_json([1])
         await asyncio.wait_for(future, timeout=3)
         handle_ws_message.assert_called_once()
@@ -234,7 +246,11 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client, mocker):
             session=client,
             unprocessed_json_response_handler=unprocessed_json_response_handler,
     ) as rpc:
-        handle_ws_message = mocker.patch.object(rpc, '_handle_ws_message', side_effect=rpc._handle_ws_message)
+        handle_ws_message = mocker.patch.object(
+            rpc,
+            '_handle_single_ws_message',
+            side_effect=rpc._handle_single_ws_message,
+        )
         await rpc.send_json([1, 2, 3])
         await asyncio.wait_for(future, timeout=3)
         handle_ws_message.assert_called_once()
@@ -280,11 +296,11 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client):
     client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
     called_methods = [
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=1, name='sum', params=[1, 2, 4]),
-        aiohttp_rpc.CalledJsonRpcMethod(name='notify_hello', params=[1, 2, 4], is_notification=True),
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=2, name='subtract', params=[42, 23]),
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=5, name='foo.get', params={'name': 'myself'}),
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=9, name='get_data'),
+        aiohttp_rpc.JsonRpcRequest(id=1, method_name='sum', params=[1, 2, 4]),
+        aiohttp_rpc.JsonRpcRequest(method_name='notify_hello', params=[1, 2, 4]),
+        aiohttp_rpc.JsonRpcRequest(id=2, method_name='subtract', params=[42, 23]),
+        aiohttp_rpc.JsonRpcRequest(id=5, method_name='foo.get', params={'name': 'myself'}),
+        aiohttp_rpc.JsonRpcRequest(id=9, method_name='get_data'),
     ]
 
     async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:

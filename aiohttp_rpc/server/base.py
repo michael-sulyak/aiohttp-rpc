@@ -142,8 +142,8 @@ class BaseJsonRpcServer(abc.ABC):
 
             request = protocol.JsonRpcRequest.from_dict(json_request, context=context)
         except errors.JsonRpcError as e:
-            msg_id = json_request.get('id', constants.NOTHING) if isinstance(json_request, dict) else constants.NOTHING
-            response = protocol.JsonRpcResponse(msg_id=msg_id, error=e)
+            request_id = json_request.get('id', constants.NOTHING) if isinstance(json_request, dict) else constants.NOTHING
+            response = protocol.JsonRpcResponse(id=request_id, error=e)
             return response.to_dict()
 
         response = await self._middleware_chain(request)
@@ -158,7 +158,7 @@ class BaseJsonRpcServer(abc.ABC):
 
         try:
             result = await self.call(
-                request.method,
+                request.method_name,
                 args=request.args,
                 kwargs=request.kwargs,
                 extra_args=request.extra_args,
@@ -167,7 +167,7 @@ class BaseJsonRpcServer(abc.ABC):
             error = e
 
         response = protocol.JsonRpcResponse(
-            msg_id=request.msg_id,
+            id=request.id,
             jsonrpc=request.jsonrpc,
             result=result,
             error=error,

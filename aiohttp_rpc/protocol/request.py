@@ -12,8 +12,8 @@ __all__ = (
 
 @dataclass
 class JsonRpcRequest:
-    method: str
-    msg_id: typing.Any = constants.NOTHING
+    method_name: str
+    id: typing.Any = constants.NOTHING
     jsonrpc: str = constants.VERSION_2_0
     extra_args: dict = field(default_factory=dict)
     context: dict = field(default_factory=dict)
@@ -40,15 +40,15 @@ class JsonRpcRequest:
 
     @property
     def is_notification(self) -> bool:
-        return self.msg_id in constants.EMPTY_VALUES
+        return self.id in constants.EMPTY_VALUES
 
     @classmethod
     def from_dict(cls, data: typing.Dict[str, typing.Any], **kwargs) -> 'JsonRpcRequest':
         cls._validate_json_request(data)
 
         return cls(
-            msg_id=data.get('id', constants.NOTHING),
-            method=data['method'],
+            id=data.get('id', constants.NOTHING),
+            method_name=data['method'],
             params=data.get('params', constants.NOTHING),
             jsonrpc=data['jsonrpc'],
             **kwargs,
@@ -56,12 +56,12 @@ class JsonRpcRequest:
 
     def to_dict(self) -> dict:
         data = {
-            'method': self.method,
+            'method': self.method_name,
             'jsonrpc': self.jsonrpc,
         }
 
         if not self.is_notification:
-            data['id'] = self.msg_id
+            data['id'] = self.id
 
         if self.params is not constants.NOTHING:
             data['params'] = self.params
@@ -83,5 +83,19 @@ class JsonRpcRequest:
 class JsonRpcBatchRequest:
     requests: typing.List[JsonRpcRequest] = field(default_factory=list)
 
+    @property
+    def is_notification(self) -> bool:
+        return all(request.is_notification for request in self.requests)
+
     def to_list(self) -> typing.List[dict]:
         return [request.to_dict() for request in self.requests]
+
+    @classmethod
+    def from_list(cls, data: list, **kwargs) -> 'JsonRpcBatchRequest':
+        requests = [
+            JsonRpcRequest.from_dict(item,  **kwargs)
+            for item in data
+        ]
+
+        return cls(requests=requests)
+

@@ -1,13 +1,14 @@
 import logging
 import typing
 
-from . import errors, protocol
+from . import errors, protocol, client
 
 
 __all__ = (
     'exception_middleware',
     'extra_args_middleware',
     'logging_middleware',
+    'ws_client_for_server_response',
     'DEFAULT_MIDDLEWARES',
 )
 
@@ -25,14 +26,14 @@ async def exception_middleware(request: protocol.JsonRpcRequest, handler: typing
     except errors.JsonRpcError as e:
         logging.warning('Unprocessed errors.JsonRpcError', exc_info=True)
         response = protocol.JsonRpcResponse(
-            msg_id=request.msg_id,
+            id=request.id,
             jsonrpc=request.jsonrpc,
             error=e,
         )
     except Exception as e:
         logger.exception(e)
         response = protocol.JsonRpcResponse(
-            msg_id=request.msg_id,
+            id=request.id,
             jsonrpc=request.jsonrpc,
             error=errors.InternalError().with_traceback(),
         )
@@ -66,6 +67,14 @@ async def logging_middleware(request: protocol.JsonRpcRequest, handler: typing.C
     )
 
     return response
+
+
+async def ws_client_for_server_response(request: protocol.JsonRpcRequest,
+                                        handler: typing.Callable) -> protocol.JsonRpcResponse:
+    ws_connect = request.context['ws_connect']
+    request.context['ws_client'] = client.WsJsonRpcClient(ws_connect=ws_connect)
+    request.extra_args['rpc_ws_client'] = request.context['ws_client']
+    return await handler(request)
 
 
 DEFAULT_MIDDLEWARES = (

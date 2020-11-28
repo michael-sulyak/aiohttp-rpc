@@ -15,21 +15,21 @@ __all__ = (
 @dataclass
 class JsonRpcResponse:
     jsonrpc: str = constants.VERSION_2_0
-    msg_id: typing.Any = constants.NOTHING
+    id: typing.Any = constants.NOTHING
     result: typing.Any = constants.NOTHING
     error: typing.Optional[errors.JsonRpcError] = None
     context: dict = field(default_factory=dict)
 
     @property
     def is_notification(self) -> bool:
-        return self.msg_id in constants.EMPTY_VALUES
+        return self.id in constants.EMPTY_VALUES
 
     @classmethod
     def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcResponse':
         cls._validate_json_response(data)
 
         response = cls(
-            msg_id=data.get('id', constants.NOTHING),
+            id=data.get('id', constants.NOTHING),
             jsonrpc=data.get('jsonrpc', constants.VERSION_2_0),
             result=data.get('result'),
             **kwargs,
@@ -43,10 +43,10 @@ class JsonRpcResponse:
     def to_dict(self) -> typing.Optional[dict]:
         data = {'jsonrpc': self.jsonrpc}
 
-        if self.msg_id in constants.EMPTY_VALUES:
+        if self.id in constants.EMPTY_VALUES:
             data['id'] = None
         else:
-            data['id'] = self.msg_id
+            data['id'] = self.id
 
         if self.error in constants.EMPTY_VALUES:
             data['result'] = self.result

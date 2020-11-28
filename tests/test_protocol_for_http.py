@@ -237,11 +237,11 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client):
     client = await utils.make_client(aiohttp_client, rpc_server)
 
     called_methods = [
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=1, name='sum', params=[1, 2, 4]),
-        aiohttp_rpc.CalledJsonRpcMethod(name='notify_hello', params=[1, 2, 4], is_notification=True),
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=2, name='subtract', params=[42, 23]),
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=5, name='foo.get', params={'name': 'myself'}),
-        aiohttp_rpc.CalledJsonRpcMethod(msg_id=9, name='get_data'),
+        aiohttp_rpc.JsonRpcRequest(id=1, method_name='sum', params=[1, 2, 4]),
+        aiohttp_rpc.JsonRpcRequest(method_name='notify_hello', params=[1, 2, 4]),
+        aiohttp_rpc.JsonRpcRequest(id=2, method_name='subtract', params=[42, 23]),
+        aiohttp_rpc.JsonRpcRequest(id=5, method_name='foo.get', params={'name': 'myself'}),
+        aiohttp_rpc.JsonRpcRequest(id=9, method_name='get_data'),
     ]
 
     async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
