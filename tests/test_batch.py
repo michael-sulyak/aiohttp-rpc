@@ -57,7 +57,8 @@ async def test_unlinked_results(aiohttp_client, mocker):
 
     async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
         mocker.patch.object(rpc, 'send_json', new_callable=lambda: test_send_json_1)
-        assert await rpc.batch(('method_1', 'method_2',)) == [[1, 2, 1], [1]]
+        unlinked_results = aiohttp_rpc.UnlinkedResults(data=[[1]])
+        assert await rpc.batch(('method_1', 'method_2',)) == [[1, 2, 1], unlinked_results]
 
         mocker.patch.object(rpc, 'send_json', new_callable=lambda: test_send_json_2)
         unlinked_results = aiohttp_rpc.UnlinkedResults(data=[[1], [1]])

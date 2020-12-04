@@ -1,18 +1,17 @@
 import abc
 import types
 import typing
-import uuid
-from dataclasses import dataclass
 from functools import partial
 
-from .. import constants, errors, utils
-from ..protocol import JsonRpcRequest, JsonRpcResponse
+from .. import constants, errors, protocol, utils
 
 
 __all__ = (
     'BaseJsonRpcClient',
-    'UnlinkedResults',
 )
+
+MethodDescription = typing.Union[str, list, tuple, protocol.JsonRpcRequest]
+MethodDescriptionList = typing.Iterable[typing.Union[MethodDescription, protocol.JsonRpcBatchRequest]]
 
 
 class BaseJsonRpcClient(abc.ABC):
@@ -32,6 +31,9 @@ class BaseJsonRpcClient(abc.ABC):
                         traceback: typing.Optional[types.TracebackType]) -> None:
         await self.disconnect()
 
+    def __getattr__(self, method_name: str) -> typing.Callable:
+        return partial(self.call, method_name)
+
     @abc.abstractmethod
     async def connect(self) -> None:
         pass
@@ -40,46 +42,83 @@ class BaseJsonRpcClient(abc.ABC):
     async def disconnect(self) -> None:
         pass
 
-    async def call(self, method: str, *args, **kwargs) -> typing.Any:
-        request = JsonRpcRequest(msg_id=str(uuid.uuid4()), method=method, args=args, kwargs=kwargs)
+    async def call(self, method_name: str, *args, **kwargs) -> typing.Any:
+        request = protocol.JsonRpcRequest(id=utils.get_random_id(), method_name=method_name, args=args, kwargs=kwargs)
         response = await self.direct_call(request)
 
-        if response.error:
+        if response.error not in constants.EMPTY_VALUES:
             raise response.error
 
         return response.result
 
-    async def notify(self, method: str, *args, **kwargs) -> None:
-        request = JsonRpcRequest(method=method, args=args, kwargs=kwargs)
-        await self.send_json(request.to_dict(), without_response=True)
+    async def notify(self, method_name: str, *args, **kwargs) -> None:
+        request = protocol.JsonRpcRequest(method_name=method_name, args=args, kwargs=kwargs)
+        await self.direct_call(request)
 
-    async def batch(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> typing.Any:
-        requests = [self._parse_batch_method(method) for method in methods]
-        responses = await self.direct_batch(requests)
-        return self._collect_batch_result(requests, responses)
+    async def batch(self,
+                    method_descriptions: MethodDescriptionList, *,
+                    save_order: bool = True) -> typing.Any:
+        if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
+            batch_request = method_descriptions
+        else:
+            requests = [
+                self._parse_method_description(method_description)
+                for method_description in method_descriptions
+            ]
+            batch_request = protocol.JsonRpcBatchRequest(requests=requests)
 
-    async def batch_notify(self, methods: typing.Iterable[typing.Union[str, list, tuple]]) -> None:
-        requests = [self._parse_batch_method(method, is_notification=True) for method in methods]
-        data = [request.to_dict() for request in requests]
-        await self.send_json(data, without_response=True)
+        batch_response = await self.direct_batch(batch_request)
 
-    async def direct_call(self, request: JsonRpcRequest) -> JsonRpcResponse:
-        json_response, context = await self.send_json(request.to_dict())
-        response = JsonRpcResponse.from_dict(
+        if save_order:
+            return self._collect_batch_result(batch_request, batch_response)
+        else:
+            return [
+                response.result if response.error in constants.EMPTY_VALUES else response.error
+                for response in batch_response.responses
+            ]
+
+    async def batch_notify(self, method_descriptions: MethodDescriptionList) -> None:
+        if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
+            batch_request = method_descriptions
+        else:
+            requests = [
+                self._parse_method_description(method_description, is_notification=True)
+                for method_description in method_descriptions
+            ]
+            batch_request = protocol.JsonRpcBatchRequest(requests=requests)
+
+        await self.direct_batch(batch_request)
+
+    async def direct_call(self, request: protocol.JsonRpcRequest) -> typing.Optional[protocol.JsonRpcResponse]:
+        json_response, context = await self.send_json(request.to_dict(), without_response=request.is_notification)
+
+        if request.is_notification:
+            return None
+
+        response = protocol.JsonRpcResponse.from_dict(
             json_response,
             error_map=self.error_map,
             context=context,
         )
+
         return response
 
-    async def direct_batch(self, requests: typing.List[JsonRpcRequest]) -> typing.List[JsonRpcResponse]:
-        data = [request.to_dict() for request in requests]
-        json_response, context = await self.send_json(data)
+    async def direct_batch(self,
+                           batch_request: protocol.JsonRpcBatchRequest,
+                           ) -> typing.Optional[protocol.JsonRpcBatchResponse]:
+        if not batch_request.requests:
+            raise errors.InvalidRequest('You can not send an empty batch request.')
 
-        return [
-            JsonRpcResponse.from_dict(item, error_map=self.error_map, context=context)
-            for item in json_response
-        ]
+        is_notification = batch_request.is_notification
+        json_response, context = await self.send_json(batch_request.to_list(), without_response=is_notification)
+
+        if is_notification:
+            return None
+
+        if not json_response:
+            raise errors.ParseError('Server returned an empty batch response.')
+
+        return protocol.JsonRpcBatchResponse.from_list(json_response)
 
     @abc.abstractmethod
     async def send_json(self,
@@ -87,64 +126,80 @@ class BaseJsonRpcClient(abc.ABC):
                         without_response: bool = False) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         pass
 
-    def __getattr__(self, method) -> typing.Callable:
-        return partial(self.call, method)
-
     @staticmethod
-    def _collect_batch_result(requests: typing.List[JsonRpcRequest], responses: typing.List[JsonRpcResponse]) -> list:
-        unlinked_results = UnlinkedResults(data=[])
+    def _collect_batch_result(batch_request: protocol.JsonRpcBatchRequest,
+                              batch_response: protocol.JsonRpcBatchResponse) -> list:
+        unlinked_results = protocol.UnlinkedResults()
         responses_map = {}
 
-        for response in responses:
-            value = response.error or response.result
+        for response in batch_response.responses:
+            if response.error in constants.EMPTY_VALUES:
+                value = response.result
+            else:
+                value = response.error
 
-            if response.msg_id in constants.EMPTY_VALUES:
-                unlinked_results.data.append(value)
+            if response.id in constants.EMPTY_VALUES:
+                unlinked_results.add(value)
                 continue
 
-            responses_map[response.msg_id] = value
+            if response.id in responses_map:
+                if isinstance(responses_map[response.id], protocol.DuplicatedResults):
+                    responses_map[response.id].add(value)
+                else:
+                    responses_map[response.id] = protocol.DuplicatedResults(data=[
+                        responses_map[response.id],
+                        value,
+                    ])
+            else:
+                responses_map[response.id] = value
 
-        unlinked_results = unlinked_results.compile()
+        if not unlinked_results:
+            unlinked_results = None
+
         result = []
 
-        for request in requests:
-            if request.msg_id in constants.EMPTY_VALUES:
+        for request in batch_request.requests:
+            if request.is_notification:
                 result.append(unlinked_results)
                 continue
 
-            result.append(responses_map.get(request.msg_id, unlinked_results))
+            result.append(responses_map.get(request.id, unlinked_results))
 
         return result
 
     @staticmethod
-    def _parse_batch_method(batch_method: typing.Union[str, list, tuple], *,
-                            is_notification: bool = False) -> JsonRpcRequest:
-        msg_id = constants.NOTHING if is_notification else str(uuid.uuid4())
+    def _parse_method_description(method_description: MethodDescription, *,
+                                  is_notification: bool = False) -> protocol.JsonRpcRequest:
+        if isinstance(method_description, protocol.JsonRpcRequest):
+            return method_description
 
-        if isinstance(batch_method, str):
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method)
+        request_id = constants.NOTHING if is_notification else utils.get_random_id()
 
-        if len(batch_method) == 1:
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0])
+        if isinstance(method_description, str):
+            return protocol.JsonRpcRequest(
+                id=request_id,
+                method_name=method_description,
+            )
 
-        if len(batch_method) == 2:
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0], params=batch_method[1])
+        if len(method_description) == 1:
+            return protocol.JsonRpcRequest(
+                id=request_id,
+                method_name=method_description[0],
+            )
 
-        if len(batch_method) == 3:
-            return JsonRpcRequest(msg_id=msg_id, method=batch_method[0], args=batch_method[1], kwargs=batch_method[2])
+        if len(method_description) == 2:
+            return protocol.JsonRpcRequest(
+                id=request_id,
+                method_name=method_description[0],
+                params=method_description[1],
+            )
+
+        if len(method_description) == 3:
+            return protocol.JsonRpcRequest(
+                id=request_id,
+                method_name=method_description[0],
+                args=method_description[1],
+                kwargs=method_description[2],
+            )
 
         raise errors.InvalidParams('Use string or list (length less than or equal to 3).')
-
-
-@dataclass
-class UnlinkedResults:
-    data: list
-
-    def compile(self) -> typing.Any:
-        if not self.data:
-            return None
-
-        if len(self.data) == 1:
-            return self.data[0]
-
-        return self

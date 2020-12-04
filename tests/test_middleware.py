@@ -7,7 +7,7 @@ async def test_middleware(aiohttp_client):
         return 'ok'
 
     async def test_middleware(request, handler):
-        request.method = 'method'
+        request.method_name = 'method'
         response = await handler(request)
         response.result += '!'
         return response

@@ -6,11 +6,11 @@ authors = ["expert-m <michael@sulyak.info>"]
 
 [tool.poetry.dependencies]
 python = "^3.6"
-aiohttp = "^3.6.2"
+aiohttp = "^3.7.2"
 
 [tool.poetry.dev-dependencies]
-pytest = "^6.0.1"
-tox = "^3.19.0"
+pytest = "^6.1.2"
+tox = "^3.20.1"
 pytest-asyncio = "^0.14.0"
 pytest-aiohttp = "^0.3.0"
 pytest-mock = "^3.2.0"

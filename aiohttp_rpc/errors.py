@@ -30,6 +30,20 @@ class JsonRpcError(RuntimeError):
         self.code = code or self.code
         assert self.code, 'Error without code is not allowed.'
 
+    def __repr__(self) -> str:
+        return f'JsonRpcError({self.code}): {self.message}'
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    def __eq__(self, other: typing.Any) -> bool:
+        return (
+                isinstance(other, JsonRpcError)
+                and self.code == other.code
+                and self.message == other.message
+                and self.data == other.data
+        )
+
     def with_traceback(self, exc_info=None, traceback_exception=None) -> 'JsonRpcError':
         if not traceback_exception:
             traceback_exception = traceback.TracebackException(*sys.exc_info())
@@ -41,12 +55,6 @@ class JsonRpcError(RuntimeError):
             self.data['traceback_exception'] = ''.join(traceback_exception.format()).split("\n")
 
         return self
-
-    def __repr__(self) -> str:
-        return f'JsonRpcError({self.code}): {self.message}'
-
-    def __str__(self) -> str:
-        return self.__repr__()
 
 
 class ServerError(JsonRpcError):

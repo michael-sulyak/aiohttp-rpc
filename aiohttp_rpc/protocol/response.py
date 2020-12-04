@@ -6,27 +6,30 @@ from .. import constants, errors, utils
 
 __all__ = (
     'JsonRpcResponse',
+    'JsonRpcBatchResponse',
+    'UnlinkedResults',
+    'DuplicatedResults',
 )
 
 
 @dataclass
 class JsonRpcResponse:
     jsonrpc: str = constants.VERSION_2_0
-    msg_id: typing.Any = constants.NOTHING
+    id: typing.Any = constants.NOTHING
     result: typing.Any = constants.NOTHING
     error: typing.Optional[errors.JsonRpcError] = None
     context: dict = field(default_factory=dict)
 
     @property
     def is_notification(self) -> bool:
-        return self.msg_id is constants.NOTHING
+        return self.id in constants.EMPTY_VALUES
 
     @classmethod
     def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcResponse':
         cls._validate_json_response(data)
 
         response = cls(
-            msg_id=data.get('id', constants.NOTHING),
+            id=data.get('id', constants.NOTHING),
             jsonrpc=data.get('jsonrpc', constants.VERSION_2_0),
             result=data.get('result'),
             **kwargs,
@@ -38,12 +41,14 @@ class JsonRpcResponse:
         return response
 
     def to_dict(self) -> typing.Optional[dict]:
-        if self.msg_id is constants.NOTHING:
-            return None
+        data = {'jsonrpc': self.jsonrpc}
 
-        data = {'id': self.msg_id, 'jsonrpc': self.jsonrpc}
+        if self.id in constants.EMPTY_VALUES:
+            data['id'] = None
+        else:
+            data['id'] = self.id
 
-        if self.error is constants.NOTHING:
+        if self.error in constants.EMPTY_VALUES:
             data['result'] = self.result
         else:
             data['error'] = {'code': self.error.code, 'message': self.error.message}
@@ -81,3 +86,48 @@ class JsonRpcResponse:
             data=error.get('data'),
             code=error['code'],
         )
+
+
+@dataclass
+class JsonRpcBatchResponse:
+    responses: typing.List[JsonRpcResponse] = field(default_factory=list)
+
+    def to_list(self) -> typing.List[dict]:
+        return [response.to_dict() for response in self.responses]
+
+    @classmethod
+    def from_list(cls, data: list, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcBatchResponse':
+        responses = [
+            JsonRpcResponse.from_dict(item, error_map=error_map, **kwargs)
+            for item in data
+        ]
+
+        return cls(responses=responses)
+
+
+@dataclass
+class UnlinkedResults:
+    data: list = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return len(self.data) > 0
+
+    def get(self) -> list:
+        return self.data
+
+    def add(self, value: typing.Any) -> None:
+        self.data.append(value)
+
+
+@dataclass
+class DuplicatedResults:
+    data: list = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return len(self.data) > 0
+
+    def get(self) -> list:
+        return self.data
+
+    def add(self, value: typing.Any) -> None:
+        self.data.append(value)

@@ -3,8 +3,6 @@ import asyncio
 import typing
 from functools import partial
 
-from aiohttp import web
-
 from .. import constants, errors, protocol, utils
 
 
@@ -36,7 +34,7 @@ class BaseJsonRpcServer(abc.ABC):
 
         self.json_serialize = json_serialize
 
-    def load_middlewares(self):
+    def load_middlewares(self) -> None:
         self._middleware_chain = self._process_single_request
 
         for middleware in reversed(self.middlewares):
@@ -67,7 +65,7 @@ class BaseJsonRpcServer(abc.ABC):
         ]
 
     async def call(self,
-                   method: str, *,
+                   method_name: str, *,
                    args: typing.Optional[list] = None,
                    kwargs: typing.Optional[dict] = None,
                    extra_args: typing.Optional[dict] = None) -> typing.Any:
@@ -77,10 +75,10 @@ class BaseJsonRpcServer(abc.ABC):
         if kwargs is None:
             kwargs = {}
 
-        if method not in self.methods:
+        if method_name not in self.methods:
             raise errors.MethodNotFound
 
-        return await self.methods[method](args=args, kwargs=kwargs, extra_args=extra_args)
+        return await self.methods[method_name](args=args, kwargs=kwargs, extra_args=extra_args)
 
     def get_methods(self) -> dict:
         return {
@@ -106,20 +104,25 @@ class BaseJsonRpcServer(abc.ABC):
 
     async def _process_input_data(self,
                                   data: typing.Union[dict, list], *,
-                                  http_request: typing.Optional[web.Request] = None) -> typing.Any:
+                                  context: typing.Dict[str, typing.Any],
+                                  ) -> typing.Optional[typing.Union[dict, typing.List[dict]]]:
         if isinstance(data, list):
+            if not data:
+                return protocol.JsonRpcResponse(error=errors.InvalidRequest()).to_dict()
+
             coros = (
-                self._process_single_json_request(raw_rcp_request, http_request=http_request)
+                self._process_single_json_request(raw_rcp_request, context=context)
                 for raw_rcp_request in data
             )
             json_responses = await asyncio.gather(*coros, return_exceptions=True)
             self._prepare_exceptions(json_responses)
-            return json_responses
+            result = [json_response for json_response in json_responses if json_response is not None]
+            return result if result else None
 
         if isinstance(data, dict):
-            return await self._process_single_json_request(data, http_request=http_request)
+            return await self._process_single_json_request(data, context=context)
 
-        response = protocol.JsonRpcResponse(error=errors.ParseError('Data must be a dict or an list.'))
+        response = protocol.JsonRpcResponse(error=errors.InvalidRequest('Data must be a dict or an list.'))
         return response.to_dict()
 
     @staticmethod
@@ -132,19 +135,22 @@ class BaseJsonRpcServer(abc.ABC):
 
     async def _process_single_json_request(self,
                                            json_request: dict, *,
-                                           http_request: typing.Optional[web.Request] = None) -> dict:
-        if not isinstance(json_request, dict):
-            raise errors.ParseError('Data must be a dict or an list.')
-
-        msg_id = json_request.get('id')
-
+                                           context: typing.Dict[str, typing.Any]) -> typing.Optional[dict]:
         try:
-            request = protocol.JsonRpcRequest.from_dict(json_request, context={'http_request': http_request})
+            if not isinstance(json_request, dict):
+                raise errors.InvalidRequest('Data must be a dict.')
+
+            request = protocol.JsonRpcRequest.from_dict(json_request, context=context)
         except errors.JsonRpcError as e:
-            response = protocol.JsonRpcResponse(msg_id=msg_id, error=e)
+            request_id = json_request.get('id', constants.NOTHING) if isinstance(json_request, dict) else constants.NOTHING
+            response = protocol.JsonRpcResponse(id=request_id, error=e)
             return response.to_dict()
 
         response = await self._middleware_chain(request)
+
+        if response.is_notification:
+            return None
+
         return response.to_dict()
 
     async def _process_single_request(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
@@ -152,7 +158,7 @@ class BaseJsonRpcServer(abc.ABC):
 
         try:
             result = await self.call(
-                request.method,
+                request.method_name,
                 args=request.args,
                 kwargs=request.kwargs,
                 extra_args=request.extra_args,
@@ -161,7 +167,7 @@ class BaseJsonRpcServer(abc.ABC):
             error = e
 
         response = protocol.JsonRpcResponse(
-            msg_id=request.msg_id,
+            id=request.id,
             jsonrpc=request.jsonrpc,
             result=result,
             error=error,
