@@ -24,7 +24,7 @@ async def exception_middleware(request: protocol.JsonRpcRequest, handler: typing
     try:
         response = await handler(request)
     except errors.JsonRpcError as e:
-        logging.warning('Unprocessed errors.JsonRpcError', exc_info=True)
+        logger.warning('Unprocessed errors.JsonRpcError', exc_info=True)
         response = protocol.JsonRpcResponse(
             id=request.id,
             jsonrpc=request.jsonrpc,

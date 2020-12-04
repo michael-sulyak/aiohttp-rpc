@@ -65,7 +65,7 @@ class BaseJsonRpcServer(abc.ABC):
         ]
 
     async def call(self,
-                   method: str, *,
+                   method_name: str, *,
                    args: typing.Optional[list] = None,
                    kwargs: typing.Optional[dict] = None,
                    extra_args: typing.Optional[dict] = None) -> typing.Any:
@@ -75,10 +75,10 @@ class BaseJsonRpcServer(abc.ABC):
         if kwargs is None:
             kwargs = {}
 
-        if method not in self.methods:
+        if method_name not in self.methods:
             raise errors.MethodNotFound
 
-        return await self.methods[method](args=args, kwargs=kwargs, extra_args=extra_args)
+        return await self.methods[method_name](args=args, kwargs=kwargs, extra_args=extra_args)
 
     def get_methods(self) -> dict:
         return {

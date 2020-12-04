@@ -51,8 +51,8 @@ class BaseJsonRpcClient(abc.ABC):
 
         return response.result
 
-    async def notify(self, method: str, *args, **kwargs) -> None:
-        request = protocol.JsonRpcRequest(method_name=method, args=args, kwargs=kwargs)
+    async def notify(self, method_name: str, *args, **kwargs) -> None:
+        request = protocol.JsonRpcRequest(method_name=method_name, args=args, kwargs=kwargs)
         await self.direct_call(request)
 
     async def batch(self,
@@ -103,7 +103,9 @@ class BaseJsonRpcClient(abc.ABC):
 
         return response
 
-    async def direct_batch(self, batch_request: protocol.JsonRpcBatchRequest) -> typing.Optional[protocol.JsonRpcBatchResponse]:
+    async def direct_batch(self,
+                           batch_request: protocol.JsonRpcBatchRequest,
+                           ) -> typing.Optional[protocol.JsonRpcBatchResponse]:
         if not batch_request.requests:
             raise errors.InvalidRequest('You can not send an empty batch request.')
 
@@ -148,8 +150,8 @@ class BaseJsonRpcClient(abc.ABC):
                         responses_map[response.id],
                         value,
                     ])
-
-            responses_map[response.id] = value
+            else:
+                responses_map[response.id] = value
 
         if not unlinked_results:
             unlinked_results = None

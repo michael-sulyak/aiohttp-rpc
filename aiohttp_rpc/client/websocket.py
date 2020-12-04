@@ -134,8 +134,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                 error = errors.ServerError(utils.get_exc_message(e)).with_traceback()
                 self._notify_all_about_error(error)
                 raise
-            except Exception as e:
-                logger.exception(e)
+            except Exception:
+                logger.warning('Can not process WS message.', exc_info=True)
 
     async def _handle_single_ws_message(self, ws_msg: aiohttp.WSMessage) -> None:
         if ws_msg.type != aiohttp.WSMsgType.text:
@@ -143,8 +143,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
         try:
             json_response = json.loads(ws_msg.data)
-        except Exception as e:
-            logging.exception(e)
+        except Exception:
+            logger.warning('Can not parse json.', exc_info=True)
             return
 
         if not json_response:
@@ -158,7 +158,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             await self._handle_json_responses(json_response, ws_msg=ws_msg)
             return
 
-        logging.warning('Couldn\'t process the response.', extra={
+        logger.warning('Couldn\'t process the response.', extra={
             'json_response': json_response,
         })
 

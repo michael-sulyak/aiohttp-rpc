@@ -39,8 +39,10 @@ class JsonRpcClient(BaseJsonRpcClient):
                         without_response: bool = False) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         http_response = await self.session.post(self.url, json=data, **self.request_kwargs)
 
-        if not http_response.ok:
-            raise errors.ServerError(f'Server responded with code {http_response.status}.')
+        try:
+            http_response.raise_for_status()
+        except aiohttp.ClientResponseError as e:
+            raise errors.ServerError(f'Server responded with code {http_response.status}.') from e
 
         try:
             json_response = await http_response.json()
