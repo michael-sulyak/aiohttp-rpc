@@ -3,7 +3,7 @@ category = "main"
 description = "Async http client/server framework (asyncio)"
 name = "aiohttp"
 optional = false
-python-versions = ">=3.6"
+python-versions = "^3.6"
 version = "3.7.2"
 
 [package.dependencies]
