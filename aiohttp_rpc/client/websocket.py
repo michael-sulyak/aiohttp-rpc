@@ -3,8 +3,7 @@ import json
 import logging
 import typing
 
-import aiohttp
-from aiohttp import http_websocket, web_ws
+from aiohttp import ClientSession, client_ws, http_websocket, web_ws
 
 from .base import BaseJsonRpcClient
 from .. import errors, utils
@@ -16,7 +15,7 @@ __all__ = (
 
 logger = logging.getLogger(__name__)
 
-WSConnectType = typing.Union[aiohttp.ClientWebSocketResponse, web_ws.WebSocketResponse]
+WSConnectType = typing.Union[client_ws.ClientWebSocketResponse, web_ws.WebSocketResponse]
 
 
 class WsJsonRpcClient(BaseJsonRpcClient):
@@ -33,7 +32,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
     def __init__(self,
                  url: typing.Optional[str] = None, *,
-                 session: typing.Optional[aiohttp.ClientSession] = None,
+                 session: typing.Optional[ClientSession] = None,
                  ws_connect: typing.Optional[WSConnectType] = None,
                  timeout: typing.Optional[int] = 5,
                  json_request_handler: typing.Optional[typing.Callable] = None,
@@ -57,7 +56,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
     async def connect(self) -> None:
         if not self.session and not self.ws_connect:
-            self.session = aiohttp.ClientSession(json_serialize=self.json_serialize)
+            self.session = ClientSession(json_serialize=self.json_serialize)
 
         if not self.ws_connect:
             try:
@@ -137,8 +136,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             except Exception:
                 logger.warning('Can not process WS message.', exc_info=True)
 
-    async def _handle_single_ws_message(self, ws_msg: aiohttp.WSMessage) -> None:
-        if ws_msg.type != aiohttp.WSMsgType.text:
+    async def _handle_single_ws_message(self, ws_msg: http_websocket.WSMessage) -> None:
+        if ws_msg.type != http_websocket.WSMsgType.text:
             return
 
         try:
@@ -162,7 +161,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             'json_response': json_response,
         })
 
-    async def _handle_single_json_response(self, json_response: dict, *, ws_msg: aiohttp.WSMessage) -> None:
+    async def _handle_single_json_response(self, json_response: dict, *, ws_msg: web_ws.WSMessage) -> None:
         if 'method' in json_response:
             if self._json_request_handler:
                 await self._json_request_handler(
@@ -179,7 +178,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                 json_response=json_response,
             )
 
-    async def _handle_json_responses(self, json_responses: list, *, ws_msg: aiohttp.WSMessage) -> None:
+    async def _handle_json_responses(self, json_responses: list, *, ws_msg: web_ws.WSMessage) -> None:
         if isinstance(json_responses[0], dict) and 'method' in json_responses[0]:
             if self._json_request_handler:
                 await self._json_request_handler(ws_connect=self.ws_connect, ws_msg=ws_msg)
