@@ -6,6 +6,7 @@ checks:
 build:
   dependencies:
     before:
+      - pip install --upgrade pip
       - pip install "setuptools>=43.0.0"
       - pip install importlib-resources
       - pip install poetry==1.1.4
