@@ -8,7 +8,7 @@ build:
     before:
       - pip install "setuptools>=43.0.0"
       - pip install importlib-resources
-      - pip install poetry==1.0.5
+      - pip install poetry==1.1.4
       - poetry config virtualenvs.create false
       - poetry install
 
