@@ -427,6 +427,9 @@ async with aiohttp_rpc.JsonRpcClient('/rpc') as rpc:
 
 **Example with the decorator:**
 ```python3
+import aiohttp_rpc
+from aiohttp import web
+
 @aiohttp_rpc.rpc_method()
 def echo(*args, **kwargs):
     return {
@@ -440,6 +443,15 @@ if __name__ == '__main__':
         web.post('/rpc', aiohttp_rpc.rpc_server.handle_http_request),
     ])
     web.run_app(app, host='0.0.0.0', port=8080)
+```
+
+**It is possible to pass params into aiohttp request via `direct_call`/`direct_batch`:**
+```python3
+import aiohttp_rpc
+
+jsonrpc_request = aiohttp_rpc.JsonRpcRequest(method_name='test', params={'test_value': 1})
+async with aiohttp_rpc.JsonRpcClient('/rpc') as rpc:
+    await rpc.direct_call(jsonrpc_request, headers={'My-Customer-Header': 'custom value'}, timeout=10)
 ```
 
 [back to top](#table-of-contents)
