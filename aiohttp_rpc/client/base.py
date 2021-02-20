@@ -89,8 +89,14 @@ class BaseJsonRpcClient(abc.ABC):
 
         await self.direct_batch(batch_request)
 
-    async def direct_call(self, request: protocol.JsonRpcRequest) -> typing.Optional[protocol.JsonRpcResponse]:
-        json_response, context = await self.send_json(request.to_dict(), without_response=request.is_notification)
+    async def direct_call(self,
+                          request: protocol.JsonRpcRequest,
+                          **kwargs) -> typing.Optional[protocol.JsonRpcResponse]:
+        json_response, context = await self.send_json(
+            request.to_dict(),
+            without_response=request.is_notification,
+            **kwargs,
+        )
 
         if request.is_notification:
             return None
@@ -105,12 +111,16 @@ class BaseJsonRpcClient(abc.ABC):
 
     async def direct_batch(self,
                            batch_request: protocol.JsonRpcBatchRequest,
-                           ) -> typing.Optional[protocol.JsonRpcBatchResponse]:
+                           **kwargs) -> typing.Optional[protocol.JsonRpcBatchResponse]:
         if not batch_request.requests:
             raise errors.InvalidRequest('You can not send an empty batch request.')
 
         is_notification = batch_request.is_notification
-        json_response, context = await self.send_json(batch_request.to_list(), without_response=is_notification)
+        json_response, context = await self.send_json(
+            batch_request.to_list(),
+            without_response=is_notification,
+            **kwargs,
+        )
 
         if is_notification:
             return None
@@ -123,7 +133,8 @@ class BaseJsonRpcClient(abc.ABC):
     @abc.abstractmethod
     async def send_json(self,
                         data: typing.Any, *,
-                        without_response: bool = False) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
+                        without_response: bool = False,
+                        **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         pass
 
     @staticmethod

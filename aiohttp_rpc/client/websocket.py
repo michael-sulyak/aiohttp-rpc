@@ -79,9 +79,10 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
     async def send_json(self,
                         data: typing.Any, *,
-                        without_response: bool = False) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
+                        without_response: bool = False,
+                        **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         if without_response:
-            await self.ws_connect.send_str(self.json_serialize(data))
+            await self.ws_connect.send_str(self.json_serialize(data), **kwargs)
             return None, None
 
         request_ids = self._get_ids_from_json(data)
@@ -90,7 +91,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         for request_id in request_ids:
             self._pending[request_id] = future
 
-        await self.ws_connect.send_str(self.json_serialize(data))
+        await self.ws_connect.send_str(self.json_serialize(data), **kwargs)
 
         if not request_ids:
             return None, None
