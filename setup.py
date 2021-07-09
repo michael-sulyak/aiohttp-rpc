@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     setup(
         name='aiohttp-rpc',
-        version='0.7.1',
+        version='0.7.2',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',
@@ -42,6 +42,7 @@ if __name__ == '__main__':
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: 3.9',
+            'Framework :: aiohttp',
             'Topic :: Internet',
             'Topic :: Communications',
             'Topic :: Software Development :: Libraries',
