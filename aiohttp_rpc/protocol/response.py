@@ -40,8 +40,8 @@ class JsonRpcResponse:
 
         return response
 
-    def to_dict(self) -> typing.Optional[typing.Dict[str, typing.Any]]:
-        data = {'jsonrpc': self.jsonrpc}
+    def to_dict(self) -> typing.Dict[str, typing.Any]:
+        data: typing.Dict[str, typing.Any] = {'jsonrpc': self.jsonrpc}
 
         if self.id in constants.EMPTY_VALUES:
             data['id'] = None
@@ -51,6 +51,8 @@ class JsonRpcResponse:
         if self.error in constants.EMPTY_VALUES:
             data['result'] = self.result
         else:
+            assert self.error is not None  # For mypy checking
+
             data['error'] = {'code': self.error.code, 'message': self.error.message}
 
             if self.error.data is not None:

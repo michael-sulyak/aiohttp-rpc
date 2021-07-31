@@ -58,7 +58,9 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         if not self.session and not self.ws_connect:
             self.session = ClientSession(json_serialize=self.json_serialize)
 
-        if not self.ws_connect:
+        if self.ws_connect is None:
+            assert self.url is not None and self.session is not None
+
             try:
                 self.ws_connect = await self.session.ws_connect(self.url, **self.ws_connect_kwargs)
             except Exception:
@@ -81,12 +83,14 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                         data: typing.Any, *,
                         without_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
+        assert self.ws_connect is not None
+
         if without_response:
             await self.ws_connect.send_str(self.json_serialize(data), **kwargs)
             return None, None
 
         request_ids = self._get_ids_from_json(data)
-        future = asyncio.Future()
+        future: asyncio.Future = asyncio.Future()
 
         for request_id in request_ids:
             self._pending[request_id] = future
@@ -107,7 +111,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self._pending.clear()
 
     @staticmethod
-    def _get_ids_from_json(data: typing.Any) -> typing.Optional[list]:
+    def _get_ids_from_json(data: typing.Any) -> list:
         if not data:
             return []
 
@@ -123,7 +127,11 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
         return []
 
-    async def _handle_ws_messages(self) -> typing.NoReturn:
+    async def _handle_ws_messages(self) -> None:
+        assert self.ws_connect is not None
+
+        ws_msg: http_websocket.WSMessage
+
         async for ws_msg in self.ws_connect:
             if ws_msg.type != http_websocket.WSMsgType.TEXT:
                 continue
@@ -188,7 +196,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
             if response_ids:
                 self._notify_about_results(response_ids, json_responses)
-            else:
+            elif self._unprocessed_json_response_handler:
                 self._unprocessed_json_response_handler(
                     ws_connect=self.ws_connect,
                     ws_msg=ws_msg,

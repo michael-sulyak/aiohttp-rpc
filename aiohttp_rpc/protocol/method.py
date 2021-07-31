@@ -32,7 +32,10 @@ class BaseJsonRpcMethod(abc.ABC):
             self.name = f'{prefix}{self.separator}{self.name}'
 
     @abc.abstractmethod
-    async def __call__(self, args: list, kwargs: dict, extra_args: typing.Optional[dict] = None) -> typing.Any:
+    async def __call__(self,
+                       args: typing.Sequence,
+                       kwargs: dict,
+                       extra_args: typing.Optional[dict] = None) -> typing.Any:
         pass
 
 
@@ -55,7 +58,10 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
         self._inspect_func()
 
-    async def __call__(self, args: list, kwargs: dict, extra_args: typing.Optional[dict] = None) -> typing.Any:
+    async def __call__(self,
+                       args: typing.Sequence,
+                       kwargs: dict,
+                       extra_args: typing.Optional[dict] = None) -> typing.Any:
         if self.add_extra_args and extra_args:
             args, kwargs = self._add_extra_args_in_args_and_kwargs(args, kwargs, extra_args)
 
@@ -99,9 +105,9 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         return func
 
     def _add_extra_args_in_args_and_kwargs(self,
-                                           args: list,
+                                           args: typing.Sequence,
                                            kwargs: dict,
-                                           extra_args: dict) -> typing.Tuple[list, dict]:
+                                           extra_args: dict) -> typing.Tuple[typing.Sequence, dict]:
         if not extra_args:
             return args, kwargs
 
@@ -113,7 +119,7 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         new_kwargs = self._add_extra_kwargs_in_args(kwargs, extra_args)
         return new_args, new_kwargs
 
-    def _add_extra_args_in_args(self, args: list, extra_args: dict) -> list:
+    def _add_extra_args_in_args(self, args: typing.Sequence, extra_args: dict) -> typing.Sequence:
         new_args = []
 
         for supported_arg in self.supported_args:
@@ -139,7 +145,7 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
         return kwargs
 
-    def _check_func_signature(self, args: list, kwargs: dict) -> None:
+    def _check_func_signature(self, args: typing.Sequence, kwargs: dict) -> None:
         try:
             if self.is_class:
                 inspect.signature(self.func.__init__).bind(None, *args, **kwargs)

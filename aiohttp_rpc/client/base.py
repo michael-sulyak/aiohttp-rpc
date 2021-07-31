@@ -46,6 +46,8 @@ class BaseJsonRpcClient(abc.ABC):
         request = protocol.JsonRpcRequest(id=utils.get_random_id(), method_name=method_name, args=args, kwargs=kwargs)
         response = await self.direct_call(request)
 
+        assert response is not None  # Because it isn't a notification
+
         if response.error not in constants.EMPTY_VALUES:
             raise response.error
 
@@ -61,11 +63,10 @@ class BaseJsonRpcClient(abc.ABC):
         if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
             batch_request = method_descriptions
         else:
-            requests = [
+            batch_request = protocol.JsonRpcBatchRequest(requests=[
                 self._parse_method_description(method_description)
                 for method_description in method_descriptions
-            ]
-            batch_request = protocol.JsonRpcBatchRequest(requests=requests)
+            ])
 
         batch_response = await self.direct_batch(batch_request)
 
@@ -140,7 +141,7 @@ class BaseJsonRpcClient(abc.ABC):
     def _collect_batch_result(batch_request: protocol.JsonRpcBatchRequest,
                               batch_response: protocol.JsonRpcBatchResponse) -> list:
         unlinked_results = protocol.UnlinkedResults()
-        responses_map = {}
+        responses_map: typing.Dict[typing.Any, typing.Any] = {}
 
         for response in batch_response.responses:
             if response.error in constants.EMPTY_VALUES:

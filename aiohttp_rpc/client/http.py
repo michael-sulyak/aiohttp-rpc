@@ -27,17 +27,19 @@ class JsonRpcClient(BaseJsonRpcClient):
         self._session_is_outer = session is not None
 
     async def connect(self) -> None:
-        if not self.session:
+        if self.session is None:
             self.session = aiohttp.ClientSession(json_serialize=self.json_serialize, **self.request_kwargs)
 
     async def disconnect(self) -> None:
-        if self.session and not self._session_is_outer:
+        if self.session is not None and not self._session_is_outer:
             await self.session.close()
 
     async def send_json(self,
                         data: typing.Any, *,
                         without_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
+        assert self.session is not None
+
         http_response = await self.session.post(self.url, json=data, **kwargs)
 
         try:

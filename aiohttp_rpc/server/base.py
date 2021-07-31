@@ -4,6 +4,7 @@ import typing
 from functools import partial
 
 from .. import constants, errors, protocol, utils
+from .. import typedefs
 
 
 __all__ = (
@@ -14,11 +15,11 @@ __all__ = (
 class BaseJsonRpcServer(abc.ABC):
     methods: typing.Dict[str, protocol.BaseJsonRpcMethod]
     middlewares: typing.Tuple[typing.Callable, ...]
-    json_serialize: typing.Callable[[dict], str]
-    _middleware_chain: typing.Callable
+    json_serialize: typedefs.JSONEncoderType
+    _middleware_chain: typedefs.SingleRequestProcessorType
 
     def __init__(self, *,
-                 json_serialize: typing.Callable[[dict], str] = utils.json_serialize,
+                 json_serialize: typedefs.JSONEncoderType = utils.json_serialize,
                  middlewares: typing.Iterable = (),
                  methods: typing.Optional[typing.Dict[str, protocol.BaseJsonRpcMethod]] = None) -> None:
         if methods is None:
@@ -66,11 +67,11 @@ class BaseJsonRpcServer(abc.ABC):
 
     async def call(self,
                    method_name: str, *,
-                   args: typing.Optional[list] = None,
+                   args: typing.Optional[typing.Sequence] = None,
                    kwargs: typing.Optional[dict] = None,
                    extra_args: typing.Optional[dict] = None) -> typing.Any:
         if args is None:
-            args = []
+            args = ()
 
         if kwargs is None:
             kwargs = {}
@@ -110,13 +111,20 @@ class BaseJsonRpcServer(abc.ABC):
             if not data:
                 return protocol.JsonRpcResponse(error=errors.InvalidRequest()).to_dict()
 
-            coros = (
-                self._process_single_json_request(raw_rcp_request, context=context)
-                for raw_rcp_request in data
+            json_responses = await asyncio.gather(
+                *(
+                    self._process_single_json_request(raw_rcp_request, context=context)
+                    for raw_rcp_request in data
+                ),
+                return_exceptions=True,
             )
-            json_responses = await asyncio.gather(*coros, return_exceptions=True)
-            self._prepare_exceptions(json_responses)
-            result = [json_response for json_response in json_responses if json_response is not None]
+
+            result = [
+                json_response
+                for json_response in self._prepare_exceptions(json_responses)
+                if json_response is not None
+            ]
+
             return result if result else None
 
         if isinstance(data, dict):
@@ -126,12 +134,14 @@ class BaseJsonRpcServer(abc.ABC):
         return response.to_dict()
 
     @staticmethod
-    def _prepare_exceptions(values: list) -> None:
+    def _prepare_exceptions(values: typing.Iterable) -> typing.Iterable:
         for i, value in enumerate(values):
             if isinstance(value, errors.JsonRpcError):
-                values[i] = protocol.JsonRpcResponse(error=value)
+                yield protocol.JsonRpcResponse(error=value)
             elif isinstance(value, Exception):
                 raise value
+            else:
+                yield value
 
     async def _process_single_json_request(self,
                                            json_request: dict, *,
