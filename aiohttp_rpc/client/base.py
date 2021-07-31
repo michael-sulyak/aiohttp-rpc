@@ -81,11 +81,10 @@ class BaseJsonRpcClient(abc.ABC):
         if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
             batch_request = method_descriptions
         else:
-            requests = [
+            batch_request = protocol.JsonRpcBatchRequest(requests=[
                 self._parse_method_description(method_description, is_notification=True)
                 for method_description in method_descriptions
-            ]
-            batch_request = protocol.JsonRpcBatchRequest(requests=requests)
+            ])
 
         await self.direct_batch(batch_request)
 

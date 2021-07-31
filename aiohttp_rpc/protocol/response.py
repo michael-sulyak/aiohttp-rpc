@@ -40,7 +40,7 @@ class JsonRpcResponse:
 
         return response
 
-    def to_dict(self) -> typing.Optional[dict]:
+    def to_dict(self) -> typing.Optional[typing.Dict[str, typing.Any]]:
         data = {'jsonrpc': self.jsonrpc}
 
         if self.id in constants.EMPTY_VALUES:

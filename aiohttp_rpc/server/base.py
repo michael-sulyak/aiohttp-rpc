@@ -14,11 +14,11 @@ __all__ = (
 class BaseJsonRpcServer(abc.ABC):
     methods: typing.Dict[str, protocol.BaseJsonRpcMethod]
     middlewares: typing.Tuple[typing.Callable, ...]
-    json_serialize: typing.Callable
+    json_serialize: typing.Callable[[dict], str]
     _middleware_chain: typing.Callable
 
     def __init__(self, *,
-                 json_serialize: typing.Callable = utils.json_serialize,
+                 json_serialize: typing.Callable[[dict], str] = utils.json_serialize,
                  middlewares: typing.Iterable = (),
                  methods: typing.Optional[typing.Dict[str, protocol.BaseJsonRpcMethod]] = None) -> None:
         if methods is None:
@@ -142,7 +142,11 @@ class BaseJsonRpcServer(abc.ABC):
 
             request = protocol.JsonRpcRequest.from_dict(json_request, context=context)
         except errors.JsonRpcError as e:
-            request_id = json_request.get('id', constants.NOTHING) if isinstance(json_request, dict) else constants.NOTHING
+            if isinstance(json_request, dict):
+                request_id = json_request.get('id', constants.NOTHING)
+            else:
+                request_id = constants.NOTHING
+
             response = protocol.JsonRpcResponse(id=request_id, error=e)
             return response.to_dict()
 

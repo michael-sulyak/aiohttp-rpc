@@ -98,4 +98,3 @@ class JsonRpcBatchRequest:
         ]
 
         return cls(requests=requests)
-

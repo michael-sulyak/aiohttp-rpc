@@ -256,7 +256,7 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client, mocker):
         handle_ws_message.assert_called_once()
 
 
-async def test_rpc_call_with_invalid_batch(aiohttp_client):
+async def test_rpc_call_with_different_invalid_batch(aiohttp_client):
     """
     --> [
             {"jsonrpc": "2.0", "method": "sum", "params": [1,2,4], "id": "1"},

@@ -189,7 +189,7 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client):
     client = await utils.make_client(aiohttp_client, rpc_server)
 
     json_with_error = {
-        'jsonrpc': '2.0', 'error': {'code': -32600, 'message': 'Data must be a dict or an list.'}, 'id': None,
+        'jsonrpc': '2.0', 'error': {'code': -32600, 'message': 'Data must be a dict.'}, 'id': None,
     }
 
     async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
@@ -197,7 +197,7 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client):
         assert result[0] == [json_with_error, json_with_error, json_with_error]
 
 
-async def test_rpc_call_with_invalid_batch(aiohttp_client):
+async def test_rpc_call_with_different_invalid_batch(aiohttp_client):
     """
     --> [
             {"jsonrpc": "2.0", "method": "sum", "params": [1,2,4], "id": "1"},

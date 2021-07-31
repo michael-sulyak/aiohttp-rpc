@@ -16,6 +16,8 @@ class BaseJsonRpcMethod(abc.ABC):
     name: str
     func: typing.Union[typing.Callable, typing.Type]
     separator: str = '__'
+    supported_args: list
+    supported_kwargs: list
 
     def __init__(self,
                  prefix: str,
@@ -38,8 +40,6 @@ class JsonRpcMethod(BaseJsonRpcMethod):
     add_extra_args: bool
     is_coroutine: bool
     is_class: bool
-    supported_args: list
-    supported_kwargs: list
     prepare_result: typing.Optional[typing.Callable]
 
     def __init__(self,
