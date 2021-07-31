@@ -34,8 +34,8 @@ class BaseJsonRpcMethod(abc.ABC):
     @abc.abstractmethod
     async def __call__(self,
                        args: typing.Sequence,
-                       kwargs: dict,
-                       extra_args: typing.Optional[dict] = None) -> typing.Any:
+                       kwargs: typing.Mapping,
+                       extra_args: typing.Optional[typing.Mapping] = None) -> typing.Any:
         pass
 
 
@@ -60,8 +60,8 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
     async def __call__(self,
                        args: typing.Sequence,
-                       kwargs: dict,
-                       extra_args: typing.Optional[dict] = None) -> typing.Any:
+                       kwargs: typing.Mapping,
+                       extra_args: typing.Optional[typing.Mapping] = None) -> typing.Any:
         if self.add_extra_args and extra_args:
             args, kwargs = self._add_extra_args_in_args_and_kwargs(args, kwargs, extra_args)
 
@@ -79,7 +79,7 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
     def _inspect_func(self) -> None:
         self.is_class = inspect.isclass(self.func)
-        func = self.func.__init__ if self.is_class else self._unwrap_func(self.func)
+        func = self.func.__init__ if self.is_class else self._unwrap_func(self.func)  # type: ignore
 
         argspec = inspect.getfullargspec(func)
 
@@ -96,7 +96,7 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         i = 0
 
         while hasattr(func, '__wrapped__'):
-            func = func.__wrapped__
+            func = func.__wrapped__  # type: ignore
             i += 1
 
             if i > 1_000:
@@ -106,8 +106,8 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
     def _add_extra_args_in_args_and_kwargs(self,
                                            args: typing.Sequence,
-                                           kwargs: dict,
-                                           extra_args: dict) -> typing.Tuple[typing.Sequence, dict]:
+                                           kwargs: typing.Mapping,
+                                           extra_args: typing.Mapping) -> typing.Tuple[typing.Sequence, typing.Mapping]:
         if not extra_args:
             return args, kwargs
 
@@ -119,36 +119,38 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         new_kwargs = self._add_extra_kwargs_in_args(kwargs, extra_args)
         return new_args, new_kwargs
 
-    def _add_extra_args_in_args(self, args: typing.Sequence, extra_args: dict) -> typing.Sequence:
-        new_args = []
+    def _add_extra_args_in_args(self, args: typing.Sequence, extra_args: typing.Mapping) -> typing.Sequence:
+        if self.supported_args:
+            new_args = []
 
-        for supported_arg in self.supported_args:
-            if supported_arg not in extra_args:
-                break
+            for supported_arg in self.supported_args:
+                if supported_arg not in extra_args:
+                    break
 
-            new_args.append(extra_args[supported_arg])
+                new_args.append(extra_args[supported_arg])
 
-        if new_args:
-            args = [*new_args, *args]
+            if new_args:
+                args = [*new_args, *args]
 
         return args
 
-    def _add_extra_kwargs_in_args(self, kwargs: dict, extra_args: dict) -> dict:
-        new_kwargs = {}
+    def _add_extra_kwargs_in_args(self, kwargs: typing.Mapping, extra_args: typing.Mapping) -> typing.Mapping:
+        if extra_args:
+            new_kwargs = {}
 
-        for extra_arg, value in extra_args.items():
-            if extra_arg in self.supported_kwargs:
-                new_kwargs[extra_arg] = value
+            for extra_arg, value in extra_args.items():
+                if extra_arg in self.supported_kwargs:
+                    new_kwargs[extra_arg] = value
 
-        if new_kwargs:
-            kwargs = {**kwargs, **new_kwargs}
+            if new_kwargs:
+                kwargs = {**kwargs, **new_kwargs}
 
         return kwargs
 
-    def _check_func_signature(self, args: typing.Sequence, kwargs: dict) -> None:
+    def _check_func_signature(self, args: typing.Sequence, kwargs: typing.Mapping) -> None:
         try:
             if self.is_class:
-                inspect.signature(self.func.__init__).bind(None, *args, **kwargs)
+                inspect.signature(self.func.__init__).bind(None, *args, **kwargs)  # type: ignore
             else:
                 inspect.signature(self.func).bind(*args, **kwargs)
         except TypeError as e:

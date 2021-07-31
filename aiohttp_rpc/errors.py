@@ -16,19 +16,22 @@ __all__ = (
 
 
 class JsonRpcError(RuntimeError):
-    code: typing.Optional[int] = None
-    message: typing.Optional[str] = None
+    code: int
+    message: str
     data: typing.Optional[typing.Any] = None
 
     def __init__(self,
                  message: typing.Optional[str] = None, *,
                  data: typing.Optional[typing.Any] = None,
-                 code: typing.Optional[typing.Any] = None) -> None:
+                 code: typing.Optional[int] = None) -> None:
         super().__init__(self)
+
         self.message = message or self.message
         self.data = data
         self.code = code or self.code
-        assert self.code, 'Error without code is not allowed.'
+
+        assert self.code, 'Error without a code is not allowed.'
+        assert self.message, 'Error without a message is not allowed.'
 
     def __repr__(self) -> str:
         return f'JsonRpcError({self.code}): {self.message}'

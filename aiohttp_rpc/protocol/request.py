@@ -1,7 +1,7 @@
 import typing
 from dataclasses import dataclass, field
 
-from .. import constants, errors, utils
+from .. import constants, errors, typedefs, utils
 
 
 __all__ = (
@@ -13,20 +13,22 @@ __all__ = (
 @dataclass
 class JsonRpcRequest:
     method_name: str
-    id: typing.Any = constants.NOTHING
+    id: typing.Optional[typedefs.JsonRpcIdType] = None
     jsonrpc: str = constants.VERSION_2_0
     extra_args: dict = field(default_factory=dict)
     context: dict = field(default_factory=dict)
-    params: typing.Any = constants.NOTHING
-    args: typing.Optional[typing.Union[list, tuple]] = None
-    kwargs: typing.Optional[dict] = None
+    params: typing.Any = constants.NOTHING  # Use `NOTHING`, because `None` is a valid value.
+    # We don't convert `args`. So `args` can be `list`, `tuple` or other type.
+    args: typing.Optional[typing.Sequence] = None
+    # We don't convert `kwargs`. So `kwargs` can be `dict` or other type.
+    kwargs: typing.Optional[typing.Mapping] = None
 
     def __post_init__(self) -> None:
         utils.validate_jsonrpc(self.jsonrpc)
 
         if self.params is constants.NOTHING:
             self.set_args_and_kwargs(self.args, self.kwargs)
-        elif not self.args and not self.kwargs:
+        elif self.args is None and self.kwargs is None:
             self.set_params(self.params)
         else:
             raise errors.InvalidParams('Need use params or args with kwargs.')
@@ -35,27 +37,29 @@ class JsonRpcRequest:
         self.params = params
         self.args, self.kwargs = utils.convert_params_to_args_and_kwargs(params)
 
-    def set_args_and_kwargs(self, args: typing.Optional[list] = None, kwargs: typing.Optional[dict] = None) -> None:
+    def set_args_and_kwargs(self,
+                            args: typing.Optional[typing.Sequence] = None,
+                            kwargs: typing.Optional[typing.Mapping] = None) -> None:
         self.params, self.args, self.kwargs = utils.parse_args_and_kwargs(args, kwargs)
 
     @property
     def is_notification(self) -> bool:
-        return self.id in constants.EMPTY_VALUES
+        return self.id is None
 
     @classmethod
-    def from_dict(cls, data: typing.Dict[str, typing.Any], **kwargs) -> 'JsonRpcRequest':
+    def from_dict(cls, data: typing.Mapping[str, typing.Any], **kwargs) -> 'JsonRpcRequest':
         cls._validate_json_request(data)
 
         return cls(
-            id=data.get('id', constants.NOTHING),
+            id=data.get('id'),
             method_name=data['method'],
             params=data.get('params', constants.NOTHING),
             jsonrpc=data['jsonrpc'],
             **kwargs,
         )
 
-    def to_dict(self) -> dict:
-        data = {
+    def to_dict(self) -> typing.Dict[str, typing.Any]:
+        data: typing.Dict[str, typing.Any] = {
             'method': self.method_name,
             'jsonrpc': self.jsonrpc,
         }
@@ -70,7 +74,7 @@ class JsonRpcRequest:
 
     @staticmethod
     def _validate_json_request(data: typing.Any) -> None:
-        if not isinstance(data, dict):
+        if not isinstance(data, typing.Mapping):
             raise errors.InvalidRequest('A request must be of the dict type.')
 
         if not ({'method', 'jsonrpc'}) <= data.keys():
@@ -81,7 +85,7 @@ class JsonRpcRequest:
 
 @dataclass
 class JsonRpcBatchRequest:
-    requests: typing.List[JsonRpcRequest] = field(default_factory=list)
+    requests: typing.Sequence[JsonRpcRequest] = field(default_factory=list)
 
     @property
     def is_notification(self) -> bool:
@@ -92,9 +96,7 @@ class JsonRpcBatchRequest:
 
     @classmethod
     def from_list(cls, data: list, **kwargs) -> 'JsonRpcBatchRequest':
-        requests = [
-            JsonRpcRequest.from_dict(item,  **kwargs)
+        return cls(requests=[
+            JsonRpcRequest.from_dict(item, **kwargs)
             for item in data
-        ]
-
-        return cls(requests=requests)
+        ])

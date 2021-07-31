@@ -1,7 +1,7 @@
 import typing
 from dataclasses import dataclass, field
 
-from .. import constants, errors, utils
+from .. import constants, errors, typedefs, utils
 
 
 __all__ = (
@@ -15,21 +15,21 @@ __all__ = (
 @dataclass
 class JsonRpcResponse:
     jsonrpc: str = constants.VERSION_2_0
-    id: typing.Any = constants.NOTHING
-    result: typing.Any = constants.NOTHING
+    id: typing.Optional[typedefs.JsonRpcIdType] = None
+    result: typing.Any = None
     error: typing.Optional[errors.JsonRpcError] = None
     context: dict = field(default_factory=dict)
 
     @property
     def is_notification(self) -> bool:
-        return self.id in constants.EMPTY_VALUES
+        return self.id is None
 
     @classmethod
     def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcResponse':
         cls._validate_json_response(data)
 
         response = cls(
-            id=data.get('id', constants.NOTHING),
+            id=data.get('id'),
             jsonrpc=data.get('jsonrpc', constants.VERSION_2_0),
             result=data.get('result'),
             **kwargs,
@@ -41,18 +41,14 @@ class JsonRpcResponse:
         return response
 
     def to_dict(self) -> typing.Dict[str, typing.Any]:
-        data: typing.Dict[str, typing.Any] = {'jsonrpc': self.jsonrpc}
+        data: typing.Dict[str, typing.Any] = {
+            'id': self.id,
+            'jsonrpc': self.jsonrpc,
+        }
 
-        if self.id in constants.EMPTY_VALUES:
-            data['id'] = None
-        else:
-            data['id'] = self.id
-
-        if self.error in constants.EMPTY_VALUES:
+        if self.error is None:
             data['result'] = self.result
         else:
-            assert self.error is not None  # For mypy checking
-
             data['error'] = {'code': self.error.code, 'message': self.error.message}
 
             if self.error.data is not None:
@@ -75,7 +71,7 @@ class JsonRpcResponse:
         if not isinstance(error, dict):
             raise errors.InvalidRequest
 
-        if not ({'code', 'message'}) <= error.keys():
+        if not {'code', 'message'} <= error.keys():
             raise errors.InvalidRequest
 
         if error_map:

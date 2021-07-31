@@ -6,7 +6,7 @@ import typing
 from aiohttp import ClientSession, client_ws, http_websocket, web_ws
 
 from .base import BaseJsonRpcClient
-from .. import errors, utils
+from .. import errors, typedefs, utils
 
 
 __all__ = (
@@ -111,18 +111,18 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self._pending.clear()
 
     @staticmethod
-    def _get_ids_from_json(data: typing.Any) -> list:
+    def _get_ids_from_json(data: typing.Any) -> typing.List[typedefs.JsonRpcIdType]:
         if not data:
             return []
 
-        if isinstance(data, dict) and data.get('id') is not None:
+        if isinstance(data, typing.Mapping) and data.get('id') is not None:
             return [data['id']]
 
-        if isinstance(data, list):
+        if isinstance(data, typing.Sequence):
             return [
                 item['id']
                 for item in data
-                if isinstance(item, dict) and item.get('id') is not None
+                if isinstance(item, typing.Mapping) and item.get('id') is not None
             ]
 
         return []
@@ -209,7 +209,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
         self.clear_pending()
 
-    def _notify_about_result(self, response_id: typing.Any, json_response: dict) -> None:
+    def _notify_about_result(self, response_id: typedefs.JsonRpcIdType, json_response: dict) -> None:
         future = self._pending.pop(response_id, None)
 
         if future:

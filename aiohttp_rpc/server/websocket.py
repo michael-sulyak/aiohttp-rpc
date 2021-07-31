@@ -72,6 +72,8 @@ class WsJsonRpcServer(BaseJsonRpcServer):
                                  ws_msg: web_ws.WSMessage, *,
                                  ws_connect: web_ws.WebSocketResponse,
                                  context: dict) -> None:
+        json_response: typing.Optional[typing.Union[dict, typing.List[dict]]]
+
         try:
             input_data = json.loads(ws_msg.data)
         except json.JSONDecodeError as e:
