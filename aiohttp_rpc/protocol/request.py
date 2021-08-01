@@ -15,8 +15,8 @@ class JsonRpcRequest:
     method_name: str
     id: typing.Optional[typedefs.JsonRpcIdType] = None
     jsonrpc: str = constants.VERSION_2_0
-    extra_args: dict = field(default_factory=dict)
-    context: dict = field(default_factory=dict)
+    extra_args:  typing.MutableMapping = field(default_factory=dict)
+    context: typing.MutableMapping = field(default_factory=dict)
     params: typing.Any = constants.NOTHING  # Use `NOTHING`, because `None` is a valid value.
     # We don't convert `args`. So `args` can be `list`, `tuple` or other type.
     args: typing.Optional[typing.Sequence] = None
@@ -47,7 +47,7 @@ class JsonRpcRequest:
         return self.id is None
 
     @classmethod
-    def from_dict(cls, data: typing.Mapping[str, typing.Any], **kwargs) -> 'JsonRpcRequest':
+    def load(cls, data: typing.Any, **kwargs) -> 'JsonRpcRequest':
         cls._validate_json_request(data)
 
         return cls(
@@ -58,7 +58,7 @@ class JsonRpcRequest:
             **kwargs,
         )
 
-    def to_dict(self) -> typing.Dict[str, typing.Any]:
+    def dump(self) -> typing.Mapping[str, typing.Any]:
         data: typing.Dict[str, typing.Any] = {
             'method': self.method_name,
             'jsonrpc': self.jsonrpc,
@@ -85,18 +85,21 @@ class JsonRpcRequest:
 
 @dataclass
 class JsonRpcBatchRequest:
-    requests: typing.Sequence[JsonRpcRequest] = field(default_factory=list)
+    requests: typing.Tuple[JsonRpcRequest, ...] = field(default_factory=tuple)
 
     @property
     def is_notification(self) -> bool:
         return all(request.is_notification for request in self.requests)
 
-    def to_list(self) -> typing.List[dict]:
-        return [request.to_dict() for request in self.requests]
-
     @classmethod
-    def from_list(cls, data: list, **kwargs) -> 'JsonRpcBatchRequest':
-        return cls(requests=[
-            JsonRpcRequest.from_dict(item, **kwargs)
+    def load(cls, data: typing.Any, **kwargs) -> 'JsonRpcBatchRequest':
+        if not isinstance(data, typing.Sequence):
+            raise errors.InvalidRequest('A batch request must be of the list type.')
+
+        return cls(requests=tuple(
+            JsonRpcRequest.load(item, **kwargs)
             for item in data
-        ])
+        ))
+
+    def dump(self) -> typing.Tuple[typing.Mapping[str, typing.Any], ...]:
+        return tuple(request.dump() for request in self.requests)

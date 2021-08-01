@@ -21,7 +21,7 @@ class JsonRpcServer(BaseJsonRpcServer):
             input_data = await http_request.json()
         except json.JSONDecodeError as e:
             response = protocol.JsonRpcResponse(error=errors.ParseError(utils.get_exc_message(e)))
-            return web.json_response(response.to_dict(), dumps=self.json_serialize)
+            return web.json_response(response.dump(), dumps=self.json_serialize)
 
         output_data = await self._process_input_data(input_data, context={'http_request': http_request})
 

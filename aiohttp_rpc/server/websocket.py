@@ -51,6 +51,8 @@ class WsJsonRpcServer(BaseJsonRpcServer):
 
         ws_rpc_client = WsJsonRpcClient(ws_connect=ws_connect)
 
+        ws_msg: http_websocket.WSMessage
+
         async for ws_msg in ws_connect:
             if ws_msg.type != http_websocket.WSMsgType.TEXT:
                 continue
@@ -72,13 +74,13 @@ class WsJsonRpcServer(BaseJsonRpcServer):
                                  ws_msg: web_ws.WSMessage, *,
                                  ws_connect: web_ws.WebSocketResponse,
                                  context: dict) -> None:
-        json_response: typing.Optional[typing.Union[dict, typing.List[dict]]]
+        json_response: typing.Optional[typing.Union[typing.Mapping, typing.Sequence[typing.Mapping]]]
 
         try:
             input_data = json.loads(ws_msg.data)
         except json.JSONDecodeError as e:
             response = protocol.JsonRpcResponse(error=errors.ParseError(utils.get_exc_message(e)))
-            json_response = response.to_dict()
+            json_response = response.dump()
         else:
             json_response = await self._process_input_data(input_data, context=context)
 

@@ -304,8 +304,8 @@ async def test_rpc_call_with_different_invalid_batch(aiohttp_client):
     ]
 
     async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
-        assert await rpc.batch(called_methods) == [7, None, 19, errors.MethodNotFound(), ['hello', 5]]
-        assert await rpc.batch(called_methods, save_order=False) == [7, 19, errors.MethodNotFound(), ['hello', 5]]
+        assert await rpc.batch(called_methods) == (7, None, 19, errors.MethodNotFound(), ['hello', 5],)
+        assert await rpc.batch(called_methods, save_order=False) == (7, 19, errors.MethodNotFound(), ['hello', 5],)
 
         result = await rpc.send_json([
             {'jsonrpc': '2.0', 'method': 'sum', 'params': [1, 2, 4], 'id': '1'},

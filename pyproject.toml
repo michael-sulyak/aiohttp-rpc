@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aiohttp-rpc"
-version = "0.7.4"
+version = "1.0.0b1"
 description = ""
 authors = ["expert-m <michael@sulyak.info>"]
 

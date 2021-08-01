@@ -112,7 +112,6 @@ Existing functions can return objects that are not serialized, but this is easy 
 You can write own `json_serialize`:
 ```python3
 import aiohttp_rpc
-import typing
 import uuid
 import json
 from dataclasses import dataclass

@@ -33,8 +33,8 @@ async def test_batch(aiohttp_client):
     client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
     async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
-        assert await rpc.batch(('method_1', 'method_2',)) == [[1, 1], 1]
-        assert await rpc.batch((('method_1', 4), ('method_1', [], {'a': 5},),)) == [[1, 4], [1, 5]]
+        assert await rpc.batch(('method_1', 'method_2',)) == ([1, 1], 1,)
+        assert await rpc.batch((('method_1', 4), ('method_1', [], {'a': 5},),)) == ([1, 4], [1, 5],)
 
     async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.batch_notify(('method_1', 'method_2',)) is None

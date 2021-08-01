@@ -42,7 +42,7 @@ async def exception_middleware(request: protocol.JsonRpcRequest, handler: typing
 
 
 async def logging_middleware(request: protocol.JsonRpcRequest, handler: typing.Callable) -> protocol.JsonRpcResponse:
-    raw_request = request.to_dict()
+    raw_request = request.dump()
 
     logger.info(
         'RpcRequest id="%s" method="%s" params="%s"',
@@ -54,7 +54,7 @@ async def logging_middleware(request: protocol.JsonRpcRequest, handler: typing.C
 
     response = await handler(request)
 
-    raw_response = request.to_dict()
+    raw_response = request.dump()
 
     logger.info(
         'RpcResponse id="%s" method="%s" params="%s" result="%s" error="%s"',

@@ -15,6 +15,12 @@ UnboundSingleRequestProcessorType = typing.Callable[
     typing.Awaitable['protocol.JsonRpcResponse'],
 ]
 
-MethodDescriptionType = typing.Union[str, list, tuple, 'protocol.JsonRpcRequest']
-MethodDescriptionsType = typing.Union[typing.Iterable[MethodDescriptionType], 'protocol.JsonRpcBatchRequest']
+ClientMethodDescriptionType = typing.Union[str, typing.Sequence, 'protocol.JsonRpcRequest']
+ClientMethodDescriptionsType = typing.Union[
+    typing.Iterable[ClientMethodDescriptionType],
+    'protocol.JsonRpcBatchRequest',
+]
+
+ServerMethodDescriptionType = typing.Union['protocol.BaseJsonRpcMethod', typing.Iterable, typing.Callable]
+
 WSConnectType = typing.Union[client_ws.ClientWebSocketResponse, web_ws.WebSocketResponse]

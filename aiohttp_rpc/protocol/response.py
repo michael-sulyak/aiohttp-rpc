@@ -18,14 +18,16 @@ class JsonRpcResponse:
     id: typing.Optional[typedefs.JsonRpcIdType] = None
     result: typing.Any = None
     error: typing.Optional[errors.JsonRpcError] = None
-    context: dict = field(default_factory=dict)
+    context: typing.MutableMapping = field(default_factory=dict)
 
     @property
     def is_notification(self) -> bool:
         return self.id is None
 
     @classmethod
-    def from_dict(cls, data: dict, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcResponse':
+    def load(cls,
+             data: typing.Any, *,
+             error_map: typing.Optional[typing.Mapping] = None, **kwargs) -> 'JsonRpcResponse':
         cls._validate_json_response(data)
 
         response = cls(
@@ -40,7 +42,7 @@ class JsonRpcResponse:
 
         return response
 
-    def to_dict(self) -> typing.Dict[str, typing.Any]:
+    def dump(self) -> typing.Mapping[str, typing.Any]:
         data: typing.Dict[str, typing.Any] = {
             'id': self.id,
             'jsonrpc': self.jsonrpc,
@@ -58,7 +60,7 @@ class JsonRpcResponse:
 
     @staticmethod
     def _validate_json_response(data: typing.Any) -> None:
-        if not isinstance(data, dict):
+        if not isinstance(data, typing.Mapping):
             raise errors.InvalidRequest
 
         utils.validate_jsonrpc(data.get('jsonrpc'))
@@ -67,8 +69,10 @@ class JsonRpcResponse:
             raise errors.InvalidRequest('"result" or "error" not found in data.', data={'raw_response': data})
 
     @staticmethod
-    def _add_error(response: 'JsonRpcResponse', error: typing.Any, *, error_map: typing.Optional[dict] = None) -> None:
-        if not isinstance(error, dict):
+    def _add_error(response: 'JsonRpcResponse',
+                   error: typing.Any, *,
+                   error_map: typing.Optional[typing.Mapping] = None) -> None:
+        if not isinstance(error, typing.Mapping):
             raise errors.InvalidRequest
 
         if not {'code', 'message'} <= error.keys():
@@ -88,19 +92,23 @@ class JsonRpcResponse:
 
 @dataclass
 class JsonRpcBatchResponse:
-    responses: typing.List[JsonRpcResponse] = field(default_factory=list)
-
-    def to_list(self) -> typing.List[dict]:
-        return [response.to_dict() for response in self.responses]
+    responses: typing.Tuple[JsonRpcResponse, ...] = field(default_factory=tuple)
 
     @classmethod
-    def from_list(cls, data: list, *, error_map: typing.Optional[dict] = None, **kwargs) -> 'JsonRpcBatchResponse':
-        responses = [
-            JsonRpcResponse.from_dict(item, error_map=error_map, **kwargs)
-            for item in data
-        ]
+    def load(cls,
+             data: typing.Any, *,
+             error_map: typing.Optional[typing.Mapping] = None,
+             **kwargs) -> 'JsonRpcBatchResponse':
+        if not isinstance(data, typing.Sequence):
+            raise errors.InvalidRequest('A batch request must be of the list type.')
 
-        return cls(responses=responses)
+        return cls(responses=tuple(
+            JsonRpcResponse.load(item, error_map=error_map, **kwargs)
+            for item in data
+        ))
+
+    def dump(self) -> typing.Tuple[typing.Mapping[str, typing.Any], ...]:
+        return tuple(response.dump() for response in self.responses)
 
 
 @dataclass

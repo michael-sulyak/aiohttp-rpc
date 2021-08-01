@@ -12,7 +12,7 @@ __all__ = (
 
 
 class BaseJsonRpcClient(abc.ABC):
-    error_map: typing.Dict[int, typing.Type[errors.JsonRpcError]] = {
+    error_map: typing.Mapping[int, typing.Type[errors.JsonRpcError]] = {
         error.code: error
         for error in errors.DEFAULT_KNOWN_ERRORS
     }
@@ -55,15 +55,15 @@ class BaseJsonRpcClient(abc.ABC):
         await self.direct_call(request)
 
     async def batch(self,
-                    method_descriptions: typedefs.MethodDescriptionsType, *,
-                    save_order: bool = True) -> typing.Any:
+                    method_descriptions: typedefs.ClientMethodDescriptionsType, *,
+                    save_order: bool = True) -> typing.Sequence:
         if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
             batch_request = method_descriptions
         else:
-            batch_request = protocol.JsonRpcBatchRequest(requests=[
+            batch_request = protocol.JsonRpcBatchRequest(requests=tuple(
                 self._parse_method_description(method_description)
                 for method_description in method_descriptions
-            ])
+            ))
 
         batch_response = await self.direct_batch(batch_request)
 
@@ -72,19 +72,19 @@ class BaseJsonRpcClient(abc.ABC):
         if save_order:
             return self._collect_batch_result(batch_request, batch_response)
         else:
-            return [
+            return tuple(
                 response.result if response.error is None else response.error
                 for response in batch_response.responses
-            ]
+            )
 
-    async def batch_notify(self, method_descriptions: typedefs.MethodDescriptionsType) -> None:
+    async def batch_notify(self, method_descriptions: typedefs.ClientMethodDescriptionsType) -> None:
         if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
             batch_request = method_descriptions
         else:
-            batch_request = protocol.JsonRpcBatchRequest(requests=[
+            batch_request = protocol.JsonRpcBatchRequest(requests=tuple(
                 self._parse_method_description(method_description, is_notification=True)
                 for method_description in method_descriptions
-            ])
+            ))
 
         await self.direct_batch(batch_request)
 
@@ -92,7 +92,7 @@ class BaseJsonRpcClient(abc.ABC):
                           request: protocol.JsonRpcRequest,
                           **kwargs) -> typing.Optional[protocol.JsonRpcResponse]:
         json_response, context = await self.send_json(
-            request.to_dict(),
+            request.dump(),
             without_response=request.is_notification,
             **kwargs,
         )
@@ -100,7 +100,7 @@ class BaseJsonRpcClient(abc.ABC):
         if request.is_notification:
             return None
 
-        response = protocol.JsonRpcResponse.from_dict(
+        response = protocol.JsonRpcResponse.load(
             json_response,
             error_map=self.error_map,
             context=context,
@@ -117,7 +117,7 @@ class BaseJsonRpcClient(abc.ABC):
         is_notification = batch_request.is_notification
 
         json_response, context = await self.send_json(
-            batch_request.to_list(),
+            batch_request.dump(),
             without_response=is_notification,
             **kwargs,
         )
@@ -128,7 +128,7 @@ class BaseJsonRpcClient(abc.ABC):
         if not json_response:
             raise errors.ParseError('Server returned an empty batch response.')
 
-        return protocol.JsonRpcBatchResponse.from_list(json_response)
+        return protocol.JsonRpcBatchResponse.load(json_response)
 
     @abc.abstractmethod
     async def send_json(self,
@@ -139,7 +139,7 @@ class BaseJsonRpcClient(abc.ABC):
 
     @staticmethod
     def _collect_batch_result(batch_request: protocol.JsonRpcBatchRequest,
-                              batch_response: protocol.JsonRpcBatchResponse) -> list:
+                              batch_response: protocol.JsonRpcBatchResponse) -> tuple:
         unlinked_results = protocol.UnlinkedResults()
         responses_map: typing.Dict[typing.Any, typing.Any] = {}
 
@@ -164,18 +164,15 @@ class BaseJsonRpcClient(abc.ABC):
             else:
                 responses_map[response.id] = value
 
-        result = []
-
-        for request in batch_request.requests:
-            if request.is_notification:
-                result.append(unlinked_results or None)
-            else:
-                result.append(responses_map.get(request.id, unlinked_results or None))
-
-        return result
+        return tuple(
+            unlinked_results or None
+            if request.is_notification
+            else responses_map.get(request.id, unlinked_results or None)
+            for request in batch_request.requests
+        )
 
     @staticmethod
-    def _parse_method_description(method_description: typedefs.MethodDescriptionType, *,
+    def _parse_method_description(method_description: typedefs.ClientMethodDescriptionType, *,
                                   is_notification: bool = False) -> protocol.JsonRpcRequest:
         if isinstance(method_description, protocol.JsonRpcRequest):
             return method_description
@@ -206,7 +203,7 @@ class BaseJsonRpcClient(abc.ABC):
                 id=request_id,
                 method_name=method_description[0],
                 args=method_description[1],
-                kwargs=method_description[2],
+                kwargs=method_description[2],  # type: ignore
             )
 
         raise errors.InvalidParams('Use string or list (length less than or equal to 3).')

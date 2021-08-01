@@ -16,8 +16,8 @@ class BaseJsonRpcMethod(abc.ABC):
     name: str
     func: typing.Union[typing.Callable, typing.Type]
     separator: str = '__'
-    supported_args: list
-    supported_kwargs: list
+    supported_args: typing.Tuple[str, ...]
+    supported_kwargs: typing.Tuple[str, ...]
 
     def __init__(self,
                  prefix: str,
@@ -26,7 +26,7 @@ class BaseJsonRpcMethod(abc.ABC):
         assert callable(func)
 
         self.func = func
-        self.name = custom_name if custom_name else func.__name__
+        self.name = custom_name if custom_name is not None else func.__name__
 
         if prefix:
             self.name = f'{prefix}{self.separator}{self.name}'
@@ -72,7 +72,7 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         else:
             result = self.func(*args, **kwargs)
 
-        if self.prepare_result:
+        if self.prepare_result is not None:
             result = self.prepare_result(result)
 
         return result
@@ -84,11 +84,11 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         argspec = inspect.getfullargspec(func)
 
         if self.is_class or inspect.ismethod(func):
-            self.supported_args = argspec.args[1:]
+            self.supported_args = tuple(argspec.args[1:])
         else:
-            self.supported_args = argspec.args
+            self.supported_args = tuple(argspec.args)
 
-        self.supported_kwargs = argspec.kwonlyargs
+        self.supported_kwargs = tuple(argspec.kwonlyargs)
         self.is_coroutine = asyncio.iscoroutinefunction(func)
 
     @staticmethod
@@ -125,12 +125,14 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
             for supported_arg in self.supported_args:
                 if supported_arg not in extra_args:
+                    # We add extra args only in the begin.
                     break
 
                 new_args.append(extra_args[supported_arg])
 
             if new_args:
-                args = [*new_args, *args]
+                new_args.extend(args)
+                args = new_args
 
         return args
 
@@ -143,7 +145,8 @@ class JsonRpcMethod(BaseJsonRpcMethod):
                     new_kwargs[extra_arg] = value
 
             if new_kwargs:
-                kwargs = {**kwargs, **new_kwargs}
+                new_kwargs.update(kwargs)
+                kwargs = new_kwargs
 
         return kwargs
 
