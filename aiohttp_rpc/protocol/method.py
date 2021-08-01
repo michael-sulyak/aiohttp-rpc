@@ -20,8 +20,8 @@ class BaseJsonRpcMethod(abc.ABC):
     supported_kwargs: typing.Tuple[str, ...]
 
     def __init__(self,
-                 prefix: str,
                  func: typing.Union[typing.Callable, typing.Type], *,
+                 prefix: typing.Optional[str] = None,
                  custom_name: typing.Optional[str] = None) -> None:
         assert callable(func)
 
@@ -46,12 +46,14 @@ class JsonRpcMethod(BaseJsonRpcMethod):
     prepare_result: typing.Optional[typing.Callable]
 
     def __init__(self,
-                 prefix: str,
-                 func: typing.Union[typing.Callable, typing.Type], *,
+                 func: typing.Callable, *,
+                 prefix: typing.Optional[str] = None,
                  custom_name: typing.Optional[str] = None,
                  add_extra_args: bool = True,
                  prepare_result: typing.Optional[typing.Callable] = None) -> None:
-        super().__init__(prefix, func, custom_name=custom_name)
+        super().__init__(func, prefix=prefix, custom_name=custom_name)
+
+        assert callable(func)
 
         self.add_extra_args = add_extra_args
         self.prepare_result = prepare_result

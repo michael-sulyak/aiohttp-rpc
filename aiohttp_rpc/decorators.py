@@ -9,18 +9,18 @@ __all__ = (
 )
 
 
-def rpc_method(prefix: str = '', *,
+def rpc_method(*,
                rpc_server: JsonRpcServer = default_rpc_server,
+               prefix: typing.Optional[str] = None,
                custom_name: typing.Optional[str] = None,
                add_extra_args: bool = True) -> typing.Callable:
     def _decorator(func: typing.Callable) -> typing.Callable:
-        method = JsonRpcMethod(
-            prefix=prefix,
+        rpc_server.add_method(JsonRpcMethod(
             func=func,
+            prefix=prefix,
             custom_name=custom_name,
             add_extra_args=add_extra_args,
-        )
-        rpc_server.add_method(method)
+        ))
         return func
 
     return _decorator

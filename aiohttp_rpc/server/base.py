@@ -20,11 +20,11 @@ class BaseJsonRpcServer(abc.ABC):
     def __init__(self, *,
                  json_serialize: typedefs.JSONEncoderType = utils.json_serialize,
                  middlewares: typing.Sequence = (),
-                 methods: typing.Optional[typing.Dict[str, protocol.BaseJsonRpcMethod]] = None) -> None:
+                 methods: typing.Optional[typing.MutableMapping[str, protocol.BaseJsonRpcMethod]] = None) -> None:
         if methods is None:
             methods = {
-                'get_method': protocol.JsonRpcMethod('', self.get_method),
-                'get_methods': protocol.JsonRpcMethod('', self.get_methods),
+                'get_method': protocol.JsonRpcMethod(self.get_method),
+                'get_methods': protocol.JsonRpcMethod(self.get_methods),
             }
 
         self.methods = methods
@@ -38,10 +38,7 @@ class BaseJsonRpcServer(abc.ABC):
                    method: typing.Union[typedefs.ServerMethodDescriptionType], *,
                    replace: bool = False) -> protocol.BaseJsonRpcMethod:
         if not isinstance(method, protocol.BaseJsonRpcMethod):
-            if callable(method):
-                method = protocol.JsonRpcMethod('', method)
-            else:
-                method = protocol.JsonRpcMethod(*method)
+            method = protocol.JsonRpcMethod(method)
 
         if not replace and method.name in self.methods:
             raise errors.InvalidParams(f'Method {method.name} has already been added.')
@@ -51,7 +48,7 @@ class BaseJsonRpcServer(abc.ABC):
         return method
 
     def add_methods(self,
-                    methods: typing.Iterable[typedefs.ServerMethodDescriptionType], *,
+                    methods: typing.Sequence[typedefs.ServerMethodDescriptionType], *,
                     replace: bool = False) -> typing.Tuple[protocol.BaseJsonRpcMethod, ...]:
         return tuple(
             self.add_method(method, replace=replace)

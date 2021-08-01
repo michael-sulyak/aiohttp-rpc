@@ -116,7 +116,7 @@ async def test_extra_kwargs_with_class(aiohttp_client):
             return self.rpc_request.__class__.__name__
 
     rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
-    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', TestClass, prepare_result=str))
+    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(TestClass, prepare_result=str))
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
@@ -153,7 +153,7 @@ async def test_extra_kwargs_with_wrapper(aiohttp_client):
 async def test_builtin_funcs(aiohttp_client):
     rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
     rpc_server.add_method(sum)
-    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', zip, prepare_result=list))
+    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(zip, prepare_result=list))
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 

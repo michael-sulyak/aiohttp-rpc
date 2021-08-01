@@ -312,7 +312,8 @@ loop.run_until_complete(run())
     * `def __init__(self, *, json_serialize=json_serialize, middlewares=(), methods=None)`
     * `def add_method(self, method, *, replace=False) -> JsonRpcMethod`
     * `def add_methods(self, methods, replace=False) -> typing.List[JsonRpcMethod]`
-    * `def get_methods(self) -> dict`
+    * `def get_method(self, name) -> Optional[Mapping]`
+    * `def get_methods(self) -> Mapping[str, Mapping]`
     * `async def handle_http_request(self, http_request: web.Request) -> web.Response`
  
   * `class WsJsonRpcServer(BaseJsonRpcServer)`
@@ -325,8 +326,8 @@ loop.run_until_complete(run())
     * `async def disconnect(self)`
     * `async def call(self, method: str, *args, **kwargs)`
     * `async def notify(self, method: str, *args, **kwargs)`
-    * `async def batch(self, methods: typing.Iterable[typing.Union[str, list, tuple]])`
-    * `async def batch_notify(self, methods: typing.Iterable[typing.Union[str, list, tuple]])`
+    * `async def batch(self, methods: Iterable[typing.Union[str, list, tuple]])`
+    * `async def batch_notify(self, methods: Iterable[typing.Union[str, list, tuple]])`
   
   * `class WsJsonRpcClient(BaseJsonRpcClient)`
   * `class UnlinkedResults`
@@ -336,11 +337,11 @@ loop.run_until_complete(run())
     * `method: str`
     * `msg_id: typing.Any`
     * `jsonrpc: str`
-    * `extra_args: dict`
-    * `context: dict`
-    * `params: typing.Any`
-    * `args: typing.Optional[typing.Union[list, tuple]]`
-    * `kwargs: typing.Optional[dict]`
+    * `extra_args: MutableMapping`
+    * `context: MutableMapping`
+    * `params: Any`
+    * `args: Optional[Sequence]`
+    * `kwargs: Optional[Sequence]`
     * `is_notification: bool`
     
   * `class JsonRpcResponse`
@@ -348,13 +349,13 @@ loop.run_until_complete(run())
     * `msg_id: typing.Any`
     * `result: typing.Any`
     * `error: typing.Optional[JsonRpcError]`
-    * `context: dict`
+    * `context: MutableMapping`
     
   * `class JsonRpcMethod(BaseJsonRpcMethod)`
-    * `def __init__(self, prefix, func, *, custom_name=None, add_extra_args=True, prepare_result=None)`
+    * `def __init__(self, func, *, prefix=None, custom_name=None, add_extra_args=True, prepare_result=None)`
 
 ### `decorators`
-  * `def rpc_method(prefix='', *, rpc_server=default_rpc_server, custom_name=None, add_extra_args=True)`
+  * `def rpc_method(*, rpc_server=default_rpc_server, prefix=None, custom_name=None, add_extra_args=True)`
 
 ### `errors`
   * `class JsonRpcError(RuntimeError)`
@@ -389,23 +390,20 @@ loop.run_until_complete(run())
 ```python3
 import aiohttp_rpc
 
-async def ping(rpc_request): return 'pong'
-async def ping_1(rpc_request): return 'pong 1'
-async def ping_2(rpc_request): return 'pong 2'
-async def ping_3(rpc_request): return 'pong 3'
+def ping_1(rpc_request): return 'pong 1'
+def ping_2(rpc_request): return 'pong 2'
+def ping_3(rpc_request): return 'pong 3'
 
 rpc_server = aiohttp_rpc.JsonRpcServer()
-rpc_server.add_method(ping)  # 'ping'
-rpc_server.add_method(['', ping_1])  # 'ping_1'
-rpc_server.add_method(['super', ping_1])  # 'super__ping_1'
-rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('super', ping_2))  # 'super__ping_2'
-rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', ping_2, custom_name='super_ping'))  # 'super__super_ping'
+rpc_server.add_method(ping_1)  # 'ping_1'
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(ping_2))  # 'ping_2'
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(ping_2, prefix='super'))  # 'super__ping_2'
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(ping_3, custom_name='third_ping'))  # 'third_ping'
+rpc_server.add_methods([ping_3])  # 'ping_3'
 
 # Replace method
-rpc_server.add_method(['', ping_1], replace=True)  # 'ping_1'
+rpc_server.add_method(ping_1, replace=True)  # 'ping_1'
 rpc_server.add_methods([ping_1, ping_2], replace=True)  # 'ping_1', 'ping_2'
-
-rpc_server.add_methods([['new', ping_2], ping_3])  # 'new__ping2', 'ping_3'
 ```
 
 **Example with built-in functions:**
@@ -415,7 +413,7 @@ import aiohttp_rpc
 
 rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=[aiohttp_rpc.middlewares.extra_args_middleware])
 rpc_server.add_method(sum)
-rpc_server.add_method(aiohttp_rpc.JsonRpcMethod('', zip, prepare_result=list))
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(zip, prepare_result=list))
 ...
 
 # Client

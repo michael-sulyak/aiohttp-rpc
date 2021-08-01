@@ -230,7 +230,7 @@ async def test_rpc_call_with_different_invalid_batch(aiohttp_client):
 
     rpc_server = aiohttp_rpc.JsonRpcServer()
     rpc_server.add_method(subtract)
-    rpc_server.add_method((aiohttp_rpc.JsonRpcMethod(prefix='', func=my_sum, custom_name='sum')))
+    rpc_server.add_method((aiohttp_rpc.JsonRpcMethod(func=my_sum, custom_name='sum')))
     rpc_server.add_method(notify_hello)
     rpc_server.add_method(get_data)
 

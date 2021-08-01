@@ -21,6 +21,6 @@ ClientMethodDescriptionsType = typing.Union[
     'protocol.JsonRpcBatchRequest',
 ]
 
-ServerMethodDescriptionType = typing.Union['protocol.BaseJsonRpcMethod', typing.Iterable, typing.Callable]
+ServerMethodDescriptionType = typing.Union['protocol.BaseJsonRpcMethod', typing.Callable]
 
 WSConnectType = typing.Union[client_ws.ClientWebSocketResponse, web_ws.WebSocketResponse]
