@@ -24,7 +24,7 @@ class JsonRpcClient(BaseJsonRpcClient):
         self.url = url
         self.session = session
         self.request_kwargs = request_kwargs
-        self._session_is_outer = session is not None
+        self._session_is_outer = session is not None  # We don't close an outer session.
 
     async def connect(self) -> None:
         if self.session is None:

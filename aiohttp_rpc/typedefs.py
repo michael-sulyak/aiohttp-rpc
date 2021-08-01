@@ -1,5 +1,7 @@
 import typing
 
+from aiohttp import client_ws, web_ws
+
 
 if typing.TYPE_CHECKING:
     from . import protocol  # NOQA
@@ -15,3 +17,4 @@ UnboundSingleRequestProcessorType = typing.Callable[
 
 MethodDescriptionType = typing.Union[str, list, tuple, 'protocol.JsonRpcRequest']
 MethodDescriptionsType = typing.Union[typing.Iterable[MethodDescriptionType], 'protocol.JsonRpcBatchRequest']
+WSConnectType = typing.Union[client_ws.ClientWebSocketResponse, web_ws.WebSocketResponse]

@@ -3,7 +3,7 @@ import json
 import logging
 import typing
 
-from aiohttp import ClientSession, client_ws, http_websocket, web_ws
+from aiohttp import ClientSession, http_websocket, web_ws
 
 from .base import BaseJsonRpcClient
 from .. import errors, typedefs, utils
@@ -15,14 +15,12 @@ __all__ = (
 
 logger = logging.getLogger(__name__)
 
-WSConnectType = typing.Union[client_ws.ClientWebSocketResponse, web_ws.WebSocketResponse]
-
 
 class WsJsonRpcClient(BaseJsonRpcClient):
     url: typing.Optional[str]
-    ws_connect: typing.Optional[WSConnectType]
-    timeout: typing.Optional[int]
+    ws_connect: typing.Optional[typedefs.WSConnectType]
     ws_connect_kwargs: dict
+    timeout: typing.Optional[int]
     _pending: typing.Dict[typing.Any, asyncio.Future]
     _message_worker: typing.Optional[asyncio.Future] = None
     _session_is_outer: bool
@@ -33,7 +31,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
     def __init__(self,
                  url: typing.Optional[str] = None, *,
                  session: typing.Optional[ClientSession] = None,
-                 ws_connect: typing.Optional[WSConnectType] = None,
+                 ws_connect: typing.Optional[typedefs.WSConnectType] = None,
                  timeout: typing.Optional[int] = 5,
                  json_request_handler: typing.Optional[typing.Callable] = None,
                  unprocessed_json_response_handler: typing.Optional[typing.Callable] = None,
@@ -44,18 +42,18 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self.timeout = timeout
 
         self.session = session
-        self._session_is_outer = session is not None
+        self._session_is_outer = session is not None  # We don't close an outer session.
 
         self.ws_connect = ws_connect
         self.ws_connect_kwargs = ws_connect_kwargs
-        self._ws_connect_is_outer = ws_connect is not None
+        self._ws_connect_is_outer = ws_connect is not None  # We don't close an outer WS connection.
 
         self._pending = {}
         self._json_request_handler = json_request_handler
         self._unprocessed_json_response_handler = unprocessed_json_response_handler
 
     async def connect(self) -> None:
-        if not self.session and not self.ws_connect:
+        if self.session is None and self.ws_connect is None:
             self.session = ClientSession(json_serialize=self.json_serialize)
 
         if self.ws_connect is None:
@@ -70,13 +68,13 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self._message_worker = asyncio.ensure_future(self._handle_ws_messages())
 
     async def disconnect(self) -> None:
-        if self.ws_connect and not self._ws_connect_is_outer:
+        if self.ws_connect is not None and not self._ws_connect_is_outer:
             await self.ws_connect.close()
 
-        if self.session and not self._session_is_outer:
+        if self.session is not None and not self._session_is_outer:
             await self.session.close()
 
-        if self._message_worker:
+        if self._message_worker is not None:
             await self._message_worker
 
     async def send_json(self,
@@ -111,21 +109,23 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self._pending.clear()
 
     @staticmethod
-    def _get_ids_from_json(data: typing.Any) -> typing.List[typedefs.JsonRpcIdType]:
+    def _get_ids_from_json(data: typing.Any) -> typing.Tuple[typedefs.JsonRpcIdType, ...]:
         if not data:
-            return []
+            return ()
 
         if isinstance(data, typing.Mapping) and data.get('id') is not None:
-            return [data['id']]
+            return (
+                data['id'],
+            )
 
         if isinstance(data, typing.Sequence):
-            return [
+            return tuple(
                 item['id']
                 for item in data
                 if isinstance(item, typing.Mapping) and item.get('id') is not None
-            ]
+            )
 
-        return []
+        return ()
 
     async def _handle_ws_messages(self) -> None:
         assert self.ws_connect is not None
@@ -152,17 +152,17 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         try:
             json_response = json.loads(ws_msg.data)
         except Exception:
-            logger.warning('Can not parse json.', exc_info=True)
+            logger.warning('Cann\'t parse json.', exc_info=True)
             return
 
         if not json_response:
             return
 
-        if isinstance(json_response, dict):
+        if isinstance(json_response, typing.Mapping):
             await self._handle_single_json_response(json_response, ws_msg=ws_msg)
             return
 
-        if isinstance(json_response, list):
+        if isinstance(json_response, typing.Sequence):
             await self._handle_json_responses(json_response, ws_msg=ws_msg)
             return
 
@@ -170,9 +170,9 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             'json_response': json_response,
         })
 
-    async def _handle_single_json_response(self, json_response: dict, *, ws_msg: web_ws.WSMessage) -> None:
+    async def _handle_single_json_response(self, json_response: typing.Mapping, *, ws_msg: web_ws.WSMessage) -> None:
         if 'method' in json_response:
-            if self._json_request_handler:
+            if self._json_request_handler is not None:
                 await self._json_request_handler(
                     ws_connect=self.ws_connect,
                     ws_msg=ws_msg,
@@ -180,23 +180,23 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                 )
         elif 'id' in json_response and json_response['id'] in self._pending:
             self._notify_about_result(json_response['id'], json_response)
-        elif self._unprocessed_json_response_handler:
+        elif self._unprocessed_json_response_handler is not None:
             self._unprocessed_json_response_handler(
                 ws_connect=self.ws_connect,
                 ws_msg=ws_msg,
                 json_response=json_response,
             )
 
-    async def _handle_json_responses(self, json_responses: list, *, ws_msg: web_ws.WSMessage) -> None:
-        if isinstance(json_responses[0], dict) and 'method' in json_responses[0]:
-            if self._json_request_handler:
+    async def _handle_json_responses(self, json_responses: typing.Sequence, *, ws_msg: web_ws.WSMessage) -> None:
+        if isinstance(json_responses[0], typing.Mapping) and 'method' in json_responses[0]:
+            if self._json_request_handler is not None:
                 await self._json_request_handler(ws_connect=self.ws_connect, ws_msg=ws_msg)
         else:
             response_ids = self._get_ids_from_json(json_responses)
 
             if response_ids:
                 self._notify_about_results(response_ids, json_responses)
-            elif self._unprocessed_json_response_handler:
+            elif self._unprocessed_json_response_handler is not None:
                 self._unprocessed_json_response_handler(
                     ws_connect=self.ws_connect,
                     ws_msg=ws_msg,
@@ -209,18 +209,23 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
         self.clear_pending()
 
-    def _notify_about_result(self, response_id: typedefs.JsonRpcIdType, json_response: dict) -> None:
+    def _notify_about_result(self, response_id: typedefs.JsonRpcIdType, json_response: typing.Mapping) -> None:
         future = self._pending.pop(response_id, None)
 
-        if future:
+        if future is not None:
             future.set_result(json_response)
 
-    def _notify_about_results(self, response_ids: list, json_response: list) -> None:
+    def _notify_about_results(self,
+                              response_ids: typing.Sequence[typedefs.JsonRpcIdType],
+                              json_response: typing.Sequence) -> None:
         is_processed = False
 
         for response_id in response_ids:
             future = self._pending.pop(response_id, None)
 
-            if future and not is_processed:
+            if future is not None and not is_processed:
+                # We suppose that a batch result has the same ids that we sent.
+                # And this ids have the same future.
+
                 future.set_result(json_response)
                 is_processed = True
