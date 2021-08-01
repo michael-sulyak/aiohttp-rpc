@@ -9,7 +9,8 @@ if __name__ == '__main__':
         long_description = file.read()
 
     packages = find_packages(exclude=['tests'])
-    package_data = {package: ["py.typed"] for package in packages}
+    package_data = {package: ['py.typed'] for package in packages}
+
     setup(
         name='aiohttp-rpc',
         version='1.0.0b1',

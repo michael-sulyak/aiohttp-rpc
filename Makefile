@@ -35,7 +35,7 @@ test-all:
 release: dist
 	twine upload dist/*
 
-build: clean ## builds source and wheel package
+build: check clean ## builds source and wheel package
 	python setup.py sdist
 	python setup.py bdist_wheel
 	ls -l dist
