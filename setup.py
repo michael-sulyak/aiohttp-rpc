@@ -8,6 +8,8 @@ if __name__ == '__main__':
     with open('README.md') as file:
         long_description = file.read()
 
+    packages = find_packages(exclude=['tests'])
+    package_data = {package: ["py.typed"] for package in packages}
     setup(
         name='aiohttp-rpc',
         version='1.0.0b1',
@@ -25,7 +27,8 @@ if __name__ == '__main__':
         long_description=long_description,
         long_description_content_type='text/markdown',
         python_requires='>=3.6.5',
-        packages=find_packages(exclude=['tests']),
+        packages=packages,
+        package_data=package_data,
         classifiers=[
             # 'Development Status :: 1 - Planning',
             # 'Development Status :: 2 - Pre-Alpha',
