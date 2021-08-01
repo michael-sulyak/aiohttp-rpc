@@ -7,15 +7,15 @@ from .. import constants, errors, typedefs, utils
 __all__ = (
     'JsonRpcResponse',
     'JsonRpcBatchResponse',
-    'UnlinkedResults',
-    'DuplicatedResults',
+    'JsonRpcUnlinkedResults',
+    'JsonRpcDuplicatedResults',
 )
 
 
 @dataclass
 class JsonRpcResponse:
-    jsonrpc: str = constants.VERSION_2_0
     id: typing.Optional[typedefs.JsonRpcIdType] = None
+    jsonrpc: str = constants.VERSION_2_0
     result: typing.Any = None
     error: typing.Optional[errors.JsonRpcError] = None
     context: typing.MutableMapping = field(default_factory=dict)
@@ -112,28 +112,22 @@ class JsonRpcBatchResponse:
 
 
 @dataclass
-class UnlinkedResults:
-    data: list = field(default_factory=list)
+class JsonRpcUnlinkedResults:
+    results: typing.MutableSequence = field(default_factory=list)
 
     def __bool__(self) -> bool:
-        return len(self.data) > 0
-
-    def get(self) -> list:
-        return self.data
+        return len(self.results) > 0
 
     def add(self, value: typing.Any) -> None:
-        self.data.append(value)
+        self.results.append(value)
 
 
 @dataclass
-class DuplicatedResults:
-    data: list = field(default_factory=list)
+class JsonRpcDuplicatedResults:
+    results: typing.MutableSequence = field(default_factory=list)
 
     def __bool__(self) -> bool:
-        return len(self.data) > 0
-
-    def get(self) -> list:
-        return self.data
+        return len(self.results) > 0
 
     def add(self, value: typing.Any) -> None:
-        self.data.append(value)
+        self.results.append(value)

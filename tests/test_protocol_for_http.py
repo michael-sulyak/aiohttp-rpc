@@ -230,7 +230,7 @@ async def test_rpc_call_with_different_invalid_batch(aiohttp_client):
 
     rpc_server = aiohttp_rpc.JsonRpcServer()
     rpc_server.add_method(subtract)
-    rpc_server.add_method((aiohttp_rpc.JsonRpcMethod(func=my_sum, custom_name='sum')))
+    rpc_server.add_method((aiohttp_rpc.JsonRpcMethod(func=my_sum, name='sum')))
     rpc_server.add_method(notify_hello)
     rpc_server.add_method(get_data)
 
@@ -261,7 +261,7 @@ async def test_rpc_call_with_different_invalid_batch(aiohttp_client):
             {'jsonrpc': '2.0', 'result': 7, 'id': '1'},
             {'jsonrpc': '2.0', 'result': 19, 'id': '2'},
             {'jsonrpc': '2.0', 'error': {
-                'code': -32600, 'message': 'A request must contain "method" and "jsonrpc".'
+                'code': -32600, 'message': 'The request must contain "method" and "jsonrpc".'
             }, 'id': None},
             {'jsonrpc': '2.0', 'error': {
                 'code': -32601, 'message': 'The method does not exist / is not available.'

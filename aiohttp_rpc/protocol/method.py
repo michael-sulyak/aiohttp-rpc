@@ -14,22 +14,9 @@ __all__ = (
 
 class BaseJsonRpcMethod(abc.ABC):
     name: str
-    func: typing.Union[typing.Callable, typing.Type]
-    separator: str = '__'
-    supported_args: typing.Tuple[str, ...]
-    supported_kwargs: typing.Tuple[str, ...]
-
-    def __init__(self,
-                 func: typing.Union[typing.Callable, typing.Type], *,
-                 prefix: typing.Optional[str] = None,
-                 custom_name: typing.Optional[str] = None) -> None:
-        assert callable(func)
-
-        self.func = func
-        self.name = custom_name if custom_name is not None else func.__name__
-
-        if prefix:
-            self.name = f'{prefix}{self.separator}{self.name}'
+    doc: typing.Optional[str] = None
+    supported_args: typing.Tuple[str, ...] = ()
+    supported_kwargs: typing.Tuple[str, ...] = ()
 
     @abc.abstractmethod
     async def __call__(self,
@@ -38,25 +25,37 @@ class BaseJsonRpcMethod(abc.ABC):
                        extra_args: typing.Optional[typing.Mapping] = None) -> typing.Any:
         pass
 
+    def __repr__(self) -> str:
+        args = ', '.join(self.supported_args)
+
+        if self.supported_args and self.supported_kwargs:
+            args += ', *, '
+
+        if self.supported_kwargs:
+            args += ', '.join(self.supported_kwargs)
+
+        return f'JsonRpcMethod({self.name}({args}))'
+
 
 class JsonRpcMethod(BaseJsonRpcMethod):
-    add_extra_args: bool
     is_coroutine: bool
     is_class: bool
-    prepare_result: typing.Optional[typing.Callable]
+    _add_extra_args: bool
+    _prepare_result: typing.Optional[typing.Callable]
 
     def __init__(self,
                  func: typing.Callable, *,
-                 prefix: typing.Optional[str] = None,
-                 custom_name: typing.Optional[str] = None,
+                 name: typing.Optional[str] = None,
                  add_extra_args: bool = True,
                  prepare_result: typing.Optional[typing.Callable] = None) -> None:
-        super().__init__(func, prefix=prefix, custom_name=custom_name)
-
         assert callable(func)
 
-        self.add_extra_args = add_extra_args
-        self.prepare_result = prepare_result
+        self.func = func
+        self.name = name if name is not None else func.__name__
+        self.doc = self.func.__doc__
+
+        self._add_extra_args = add_extra_args
+        self._prepare_result = prepare_result
 
         self._inspect_func()
 
@@ -64,7 +63,7 @@ class JsonRpcMethod(BaseJsonRpcMethod):
                        args: typing.Sequence,
                        kwargs: typing.Mapping,
                        extra_args: typing.Optional[typing.Mapping] = None) -> typing.Any:
-        if self.add_extra_args and extra_args:
+        if self._add_extra_args and extra_args:
             args, kwargs = self._add_extra_args_in_args_and_kwargs(args, kwargs, extra_args)
 
         self._check_func_signature(args, kwargs)
@@ -74,8 +73,8 @@ class JsonRpcMethod(BaseJsonRpcMethod):
         else:
             result = self.func(*args, **kwargs)
 
-        if self.prepare_result is not None:
-            result = self.prepare_result(result)
+        if self._prepare_result is not None:
+            result = self._prepare_result(result)
 
         return result
 

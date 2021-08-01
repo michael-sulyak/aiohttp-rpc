@@ -34,7 +34,8 @@ class JsonRpcError(RuntimeError):
         assert self.message, 'Error without a message is not allowed.'
 
     def __repr__(self) -> str:
-        return f'JsonRpcError({self.code}): {self.message}'
+        msg = self.message.replace('\'', '\\\'')
+        return f'JsonRpcError({self.code}, \'{msg}\')'
 
     def __str__(self) -> str:
         return self.__repr__()

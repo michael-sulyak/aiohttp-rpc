@@ -67,7 +67,6 @@ if __name__ == '__main__':
     app.router.add_routes([
         web.post('/rpc', aiohttp_rpc.rpc_server.handle_http_request),
     ])
-
     web.run_app(app, host='0.0.0.0', port=8080)
 ```
 
@@ -78,13 +77,12 @@ import asyncio
 
 async def run():
     async with aiohttp_rpc.JsonRpcClient('http://0.0.0.0:8080/rpc') as rpc:
-        print(await rpc.ping())
-        print(await rpc.echo(a=4, b=6))
-        print(await rpc.call('echo', a=4, b=6))
-        print(await rpc.echo(1, 2, 3))
-        print(await rpc.notify('echo', 1, 2, 3))
-        print(await rpc.get_methods())
-        print(await rpc.batch([
+        print('1', await rpc.ping())
+        print('4', await rpc.echo('one', 'two'))
+        print('3', await rpc.call('echo', three='3'))
+        print('5', await rpc.notify('echo', 123))
+        print('6', await rpc.get_methods())
+        print('7', await rpc.batch([
             ['echo', 2], 
             'echo2',
             'ping',
@@ -92,6 +90,16 @@ async def run():
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(run())
+```
+
+This prints:
+```text
+1 pong
+4 {'args': ['one', 'two'], 'kwargs': {}}
+3 {'args': [], 'kwargs': {'three': '3'}}
+5 None
+6 {'get_method': {'doc': None, 'args': ['name'], 'kwargs': []}, 'get_methods': {'doc': None, 'args': [], 'kwargs': []}, 'ping': {'doc': None, 'args': ['rpc_request'], 'kwargs': []}, 'echo': {'doc': None, 'args': [], 'kwargs': []}}
+7 ({'args': [2], 'kwargs': {}}, JsonRpcError(-32601, 'The method does not exist / is not available.'), 'pong')
 ```
 
 [back to top](#table-of-contents)
@@ -111,6 +119,7 @@ And so, when you start adding existing functions, some problems may arise.
 Existing functions can return objects that are not serialized, but this is easy to fix.
 You can write own `json_serialize`:
 ```python3
+from aiohttp import web
 import aiohttp_rpc
 import uuid
 import json
@@ -139,16 +148,23 @@ def json_serialize_unknown_value(value):
 
     return repr(value)
 
-rpc_server = aiohttp_rpc.JsonRpcServer(
-    json_serialize=partial(json.dumps, default=json_serialize_unknown_value),
-)
-rpc_server.add_method(get_user_by_uuid)
+if __name__ == '__main__':
+    rpc_server = aiohttp_rpc.JsonRpcServer(
+        json_serialize=partial(json.dumps, default=json_serialize_unknown_value),
+    )
+    rpc_server.add_method(get_user_by_uuid)
+    
+    app = web.Application()
+    app.router.add_routes([
+        web.post('/rpc', rpc_server.handle_http_request),
+    ])
+    web.run_app(app, host='0.0.0.0', port=8080)
 ...
 
 """
 Example of response:
 {
-    "id": null,
+    "id": 1,
     "jsonrpc": "2.0",
     "result": {
         "uuid": "600d57b3-dda8-43d0-af79-3e81dbb344fa",
@@ -178,12 +194,10 @@ async def replace_type(data):
 
 # The middleware that converts types
 async def type_conversion_middleware(request, handler):
-    for i, arg in enumerate(request.args):
-        request.args[i] = await replace_type(arg)
-
-    for key, value in request.kwargs.items():
-        request.kwargs[key] = await replace_type(value)
-
+    request.set_args_and_kwargs(
+        args=[await replace_type(arg) for arg in request.args],
+        kwargs={key: await replace_type(value) for key, value in request.kwargs.items()},
+    )
     return await handler(request)
 
 
@@ -326,36 +340,39 @@ loop.run_until_complete(run())
     * `async def disconnect(self)`
     * `async def call(self, method: str, *args, **kwargs)`
     * `async def notify(self, method: str, *args, **kwargs)`
-    * `async def batch(self, methods: Iterable[typing.Union[str, list, tuple]])`
-    * `async def batch_notify(self, methods: Iterable[typing.Union[str, list, tuple]])`
+    * `async def batch(self, methods])`
+    * `async def batch_notify(self, methods)`
   
   * `class WsJsonRpcClient(BaseJsonRpcClient)`
-  * `class UnlinkedResults`
 
 ### `protocol`
   * `class JsonRpcRequest`
+    * `id: Union[int, str, None]`
     * `method: str`
-    * `msg_id: typing.Any`
     * `jsonrpc: str`
     * `extra_args: MutableMapping`
     * `context: MutableMapping`
     * `params: Any`
     * `args: Optional[Sequence]`
-    * `kwargs: Optional[Sequence]`
+    * `kwargs: Optional[Mapping]`
     * `is_notification: bool`
     
   * `class JsonRpcResponse`
+    * `id: Union[int, str, None]`
     * `jsonrpc: str`
-    * `msg_id: typing.Any`
-    * `result: typing.Any`
-    * `error: typing.Optional[JsonRpcError]`
+    * `result: Any`
+    * `error: Optional[JsonRpcError]`
     * `context: MutableMapping`
     
   * `class JsonRpcMethod(BaseJsonRpcMethod)`
-    * `def __init__(self, func, *, prefix=None, custom_name=None, add_extra_args=True, prepare_result=None)`
+    * `def __init__(self, func, *, name=None, add_extra_args=True, prepare_result=None)`
+  
+  * `class JsonRpcUnlinkedResults`
+
+  * `class JsonRpcDuplicatedResults`
 
 ### `decorators`
-  * `def rpc_method(*, rpc_server=default_rpc_server, prefix=None, custom_name=None, add_extra_args=True)`
+  * `def rpc_method(*, rpc_server=default_rpc_server, name=None, add_extra_args=True)`
 
 ### `errors`
   * `class JsonRpcError(RuntimeError)`
@@ -397,8 +414,7 @@ def ping_3(rpc_request): return 'pong 3'
 rpc_server = aiohttp_rpc.JsonRpcServer()
 rpc_server.add_method(ping_1)  # 'ping_1'
 rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(ping_2))  # 'ping_2'
-rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(ping_2, prefix='super'))  # 'super__ping_2'
-rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(ping_3, custom_name='third_ping'))  # 'third_ping'
+rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(ping_3, name='third_ping'))  # 'third_ping'
 rpc_server.add_methods([ping_3])  # 'ping_3'
 
 # Replace method

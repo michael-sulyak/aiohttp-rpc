@@ -13,9 +13,10 @@ __all__ = (
 @dataclass
 class JsonRpcRequest:
     method_name: str
+    # If `id` is `None` then `JsonRpcRequest` is a notification.
     id: typing.Optional[typedefs.JsonRpcIdType] = None
     jsonrpc: str = constants.VERSION_2_0
-    extra_args:  typing.MutableMapping = field(default_factory=dict)
+    extra_args: typing.MutableMapping = field(default_factory=dict)
     context: typing.MutableMapping = field(default_factory=dict)
     params: typing.Any = constants.NOTHING  # Use `NOTHING`, because `None` is a valid value.
     # We don't convert `args`. So `args` can be `list`, `tuple` or other type.
@@ -75,10 +76,10 @@ class JsonRpcRequest:
     @staticmethod
     def _validate_json_request(data: typing.Any) -> None:
         if not isinstance(data, typing.Mapping):
-            raise errors.InvalidRequest('A request must be of the dict type.')
+            raise errors.InvalidRequest('The request must be of the dict type.')
 
         if not ({'method', 'jsonrpc'}) <= data.keys():
-            raise errors.InvalidRequest('A request must contain "method" and "jsonrpc".')
+            raise errors.InvalidRequest('The request must contain "method" and "jsonrpc".')
 
         utils.validate_jsonrpc(data['jsonrpc'])
 

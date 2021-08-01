@@ -74,7 +74,7 @@ class BaseJsonRpcServer(abc.ABC):
     def get_methods(self) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
         return {
             name: {
-                'doc': method.func.__doc__,
+                'doc': method.doc,
                 'args': method.supported_args,
                 'kwargs': method.supported_kwargs,
             }
@@ -88,7 +88,7 @@ class BaseJsonRpcServer(abc.ABC):
             return None
 
         return {
-            'doc': method.func.__doc__,
+            'doc': method.doc,
             'args': method.supported_args,
             'kwargs': method.supported_kwargs,
         }

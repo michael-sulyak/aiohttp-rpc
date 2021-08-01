@@ -140,7 +140,7 @@ class BaseJsonRpcClient(abc.ABC):
     @staticmethod
     def _collect_batch_result(batch_request: protocol.JsonRpcBatchRequest,
                               batch_response: protocol.JsonRpcBatchResponse) -> tuple:
-        unlinked_results = protocol.UnlinkedResults()
+        unlinked_results = protocol.JsonRpcUnlinkedResults()
         responses_map: typing.Dict[typing.Any, typing.Any] = {}
 
         for response in batch_response.responses:
@@ -154,10 +154,10 @@ class BaseJsonRpcClient(abc.ABC):
                 continue
 
             if response.id in responses_map:
-                if isinstance(responses_map[response.id], protocol.DuplicatedResults):
+                if isinstance(responses_map[response.id], protocol.JsonRpcDuplicatedResults):
                     responses_map[response.id].add(value)
                 else:
-                    responses_map[response.id] = protocol.DuplicatedResults(data=[
+                    responses_map[response.id] = protocol.JsonRpcDuplicatedResults([
                         responses_map[response.id],
                         value,
                     ])
