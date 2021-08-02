@@ -55,7 +55,7 @@ class JsonRpcError(RuntimeError):
         if self.data is None:
             self.data = {}
 
-        if isinstance(self.data, dict):
+        if isinstance(self.data, typing.MutableMapping):
             self.data['traceback_exception'] = ''.join(traceback_exception.format()).split("\n")
 
         return self

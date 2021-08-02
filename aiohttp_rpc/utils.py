@@ -6,12 +6,16 @@ from traceback import format_exception_only
 
 from . import constants, errors
 
+if typing.TYPE_CHECKING:
+    from . import protocol  # NOQA
+
 
 __all__ = (
     'convert_params_to_args_and_kwargs',
     'parse_args_and_kwargs',
     'get_exc_message',
     'json_serialize',
+    'collect_batch_result',
 )
 
 
@@ -63,6 +67,42 @@ def get_exc_message(exp: BaseException) -> str:
 def validate_jsonrpc(jsonrpc: typing.Any) -> None:
     if jsonrpc != constants.VERSION_2_0:
         raise errors.InvalidRequest(f'Only version "{constants.VERSION_2_0}" is supported.')
+
+
+def collect_batch_result(batch_request: 'protocol.JsonRpcBatchRequest',
+                         batch_response: 'protocol.JsonRpcBatchResponse') -> typing.Tuple[typing.Any, ...]:
+    from . import protocol
+
+    unlinked_results = protocol.JsonRpcUnlinkedResults()
+    responses_map: typing.Dict[typing.Any, typing.Any] = {}
+
+    for response in batch_response.responses:
+        if response.error is None:
+            value = response.result
+        else:
+            value = response.error
+
+        if response.id is None:
+            unlinked_results.add(value)
+            continue
+
+        if response.id in responses_map:
+            if isinstance(responses_map[response.id], protocol.JsonRpcDuplicatedResults):
+                responses_map[response.id].add(value)
+            else:
+                responses_map[response.id] = protocol.JsonRpcDuplicatedResults([
+                    responses_map[response.id],
+                    value,
+                ])
+        else:
+            responses_map[response.id] = value
+
+    return tuple(
+        unlinked_results or None
+        if request.is_notification
+        else responses_map.get(request.id, unlinked_results or None)
+        for request in batch_request.requests
+    )
 
 
 json_serialize = partial(json.dumps, default=lambda x: repr(x))

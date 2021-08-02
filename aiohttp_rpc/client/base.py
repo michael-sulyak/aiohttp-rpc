@@ -70,7 +70,7 @@ class BaseJsonRpcClient(abc.ABC):
         assert batch_response is not None  # Because it isn't a notification
 
         if save_order:
-            return self._collect_batch_result(batch_request, batch_response)
+            return utils.collect_batch_result(batch_request, batch_response)
         else:
             return tuple(
                 response.result if response.error is None else response.error
@@ -136,40 +136,6 @@ class BaseJsonRpcClient(abc.ABC):
                         without_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         pass
-
-    @staticmethod
-    def _collect_batch_result(batch_request: protocol.JsonRpcBatchRequest,
-                              batch_response: protocol.JsonRpcBatchResponse) -> tuple:
-        unlinked_results = protocol.JsonRpcUnlinkedResults()
-        responses_map: typing.Dict[typing.Any, typing.Any] = {}
-
-        for response in batch_response.responses:
-            if response.error is None:
-                value = response.result
-            else:
-                value = response.error
-
-            if response.id is None:
-                unlinked_results.add(value)
-                continue
-
-            if response.id in responses_map:
-                if isinstance(responses_map[response.id], protocol.JsonRpcDuplicatedResults):
-                    responses_map[response.id].add(value)
-                else:
-                    responses_map[response.id] = protocol.JsonRpcDuplicatedResults([
-                        responses_map[response.id],
-                        value,
-                    ])
-            else:
-                responses_map[response.id] = value
-
-        return tuple(
-            unlinked_results or None
-            if request.is_notification
-            else responses_map.get(request.id, unlinked_results or None)
-            for request in batch_request.requests
-        )
 
     @staticmethod
     def _parse_method_description(method_description: typedefs.ClientMethodDescriptionType, *,

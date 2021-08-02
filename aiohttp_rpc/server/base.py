@@ -121,8 +121,8 @@ class BaseJsonRpcServer(abc.ABC):
 
             result = tuple(
                 json_response
-                for json_response in self._prepare_exceptions(json_responses)
-                if json_response is not None
+                for json_response in self._raise_exception_if_have(json_responses)
+                if json_response is not None  # Skip notifications.
             )
 
             return result if result else None
@@ -134,11 +134,10 @@ class BaseJsonRpcServer(abc.ABC):
         return response.dump()
 
     @staticmethod
-    def _prepare_exceptions(values: typing.Iterable) -> typing.Iterable:
+    def _raise_exception_if_have(values: typing.Iterable) -> typing.Iterable:
         for i, value in enumerate(values):
-            if isinstance(value, errors.JsonRpcError):
-                yield protocol.JsonRpcResponse(error=value)
-            elif isinstance(value, Exception):
+            if isinstance(value, Exception):
+                # Use middlewares (`exception_middleware`) to process exceptions.
                 raise value
             else:
                 yield value
