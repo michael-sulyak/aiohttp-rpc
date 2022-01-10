@@ -13,7 +13,7 @@ if __name__ == '__main__':
 
     setup(
         name='aiohttp-rpc',
-        version='1.0.0',
+        version='1.0.1',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',

@@ -9,7 +9,7 @@ build:
       - pip install --upgrade pip
       - pip install "setuptools>=43.0.0"
       - pip install importlib-resources
-      - pip install poetry==1.1.4
+      - pip install poetry==1.1.12
       - poetry config virtualenvs.create false
       - poetry install
 
@@ -33,6 +33,10 @@ build:
     py39:
       environment:
         python: 3.9.0
+
+    py310:
+      environment:
+        python: 3.10.0
 
       tests:
         override:
