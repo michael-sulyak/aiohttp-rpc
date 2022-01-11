@@ -18,25 +18,25 @@ build:
       - tox
 
   nodes:
-    py36:
-      environment:
-        python: 3.6.5
+#    py3.6:
+#      environment:
+#        python: 3.6.5
+#
+#    py3.7:
+#      environment:
+#        python: 3.7.0
+#
+#    py3.8:
+#      environment:
+#        python: 3.8.0
+#
+#    py3.9:
+#      environment:
+#        python: 3.9.0
 
-    py37:
+    py3.10:
       environment:
-        python: 3.7.0
-
-    py38:
-      environment:
-        python: 3.8.0
-
-    py39:
-      environment:
-        python: 3.9.0
-
-    py310:
-      environment:
-        python: 3.10.0
+        python: 3.10.1
 
       tests:
         override:
