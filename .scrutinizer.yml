@@ -36,7 +36,7 @@ build:
 
     py3.10:
       environment:
-        python: 3.10.1
+        python: 3.10-dev
 
       tests:
         override:
