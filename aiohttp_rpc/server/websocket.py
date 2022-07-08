@@ -66,7 +66,7 @@ class WsJsonRpcServer(BaseJsonRpcServer):
                     'ws_rpc_client': ws_rpc_client,
                 },
             )
-            asyncio.ensure_future(coro)  # TODO: asyncio.create_task(coro) in Python 3.7+
+            asyncio.create_task(coro)
 
         return ws_connect
 
