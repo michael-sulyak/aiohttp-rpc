@@ -99,7 +99,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             return None, None
 
         if self.timeout is not None:
-            future = asyncio.wait_for(future, timeout=self.timeout)
+            future = asyncio.wait_for(future, timeout=self.timeout)  # type: ignore
 
         result = await future
 
