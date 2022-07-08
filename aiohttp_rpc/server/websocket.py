@@ -17,6 +17,7 @@ __all__ = (
 class WsJsonRpcServer(BaseJsonRpcServer):
     rcp_websockets: weakref.WeakSet
     _json_response_handler: typing.Optional[typing.Callable] = None
+    _background_tasks: typing.Set
 
     def __init__(self,
                  *args,
@@ -26,6 +27,7 @@ class WsJsonRpcServer(BaseJsonRpcServer):
 
         self.rcp_websockets = weakref.WeakSet()
         self._json_response_handler = json_response_handler
+        self._background_tasks = set()
 
     async def handle_http_request(self, http_request: web.Request) -> web.StreamResponse:
         if http_request.method != 'GET' or http_request.headers.get('upgrade', '').lower() != 'websocket':
@@ -66,7 +68,12 @@ class WsJsonRpcServer(BaseJsonRpcServer):
                     'ws_rpc_client': ws_rpc_client,
                 },
             )
-            asyncio.create_task(coro)
+
+            task = asyncio.create_task(coro)
+
+            # To avoid a task disappearing mid execution:
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         return ws_connect
 

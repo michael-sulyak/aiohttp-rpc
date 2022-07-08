@@ -27,6 +27,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
     _ws_connect_is_outer: bool
     _json_request_handler: typing.Optional[typing.Callable] = None
     _unprocessed_json_response_handler: typing.Optional[typing.Callable] = None
+    _background_tasks: typing.Set
 
     def __init__(self,
                  url: typing.Optional[str] = None, *,
@@ -51,6 +52,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self._pending = {}
         self._json_request_handler = json_request_handler
         self._unprocessed_json_response_handler = unprocessed_json_response_handler
+        self._background_tasks = set()
 
     async def connect(self) -> None:
         if self.session is None and self.ws_connect is None:
@@ -65,7 +67,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                 await self.disconnect()
                 raise
 
-        self._message_worker = asyncio.ensure_future(self._handle_ws_messages())
+        self._message_worker = asyncio.create_task(self._handle_ws_messages())
 
     async def disconnect(self) -> None:
         if self.ws_connect is not None and not self._ws_connect_is_outer:
@@ -137,13 +139,17 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                 continue
 
             try:
-                asyncio.ensure_future(self._handle_single_ws_message(ws_msg))
+                task = asyncio.create_task(self._handle_single_ws_message(ws_msg))
             except asyncio.CancelledError as e:
                 error = errors.ServerError(utils.get_exc_message(e)).with_traceback()
                 self._notify_all_about_error(error)
                 raise
             except Exception:
                 logger.warning('Can not process WS message.', exc_info=True)
+            else:
+                # To avoid a task disappearing mid execution:
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
     async def _handle_single_ws_message(self, ws_msg: http_websocket.WSMessage) -> None:
         if ws_msg.type != http_websocket.WSMsgType.text:
