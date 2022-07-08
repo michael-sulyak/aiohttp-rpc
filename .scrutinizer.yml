@@ -30,11 +30,11 @@ build:
       environment:
         python: 3.9.0
 
-    py3.10:
-      environment:
-        python: 3.10.0
-
       tests:
         override:
           - tox
           - py-scrutinizer-run
+
+#    py3.10:
+#      environment:
+#        python: 3.10.0
