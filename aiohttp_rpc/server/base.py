@@ -15,7 +15,7 @@ class BaseJsonRpcServer(abc.ABC):
     methods: typing.MutableMapping[str, protocol.BaseJsonRpcMethod]
     middlewares: typing.Sequence[typing.Callable]
     json_serialize: typedefs.UnboundJSONEncoderType
-    _middleware_chain: typedefs.UnboundSingleRequestProcessorType
+    _middleware_chain: typing.ClassVar[typedefs.UnboundSingleRequestProcessorType]
 
     def __init__(self, *,
                  json_serialize: typedefs.JSONEncoderType = utils.json_serialize,

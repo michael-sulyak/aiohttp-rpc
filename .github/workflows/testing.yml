@@ -33,3 +33,6 @@ jobs:
 
     - name: Test with tox
       run: tox
+
+    - name: Check typings
+      run: mypy aiohttp_rpc

@@ -8,7 +8,7 @@ if typing.TYPE_CHECKING:
 
 JsonRpcIdType = typing.Union[int, str]
 JSONEncoderType = typing.Callable[[typing.Any], str]
-UnboundJSONEncoderType = typing.Callable[[typing.Any, typing.Any], str]
+UnboundJSONEncoderType = typing.Callable[[typing.Any], str]
 SingleRequestProcessorType = typing.Callable[['protocol.JsonRpcRequest'], typing.Awaitable['protocol.JsonRpcResponse']]
 UnboundSingleRequestProcessorType = typing.Callable[
     [typing.Any, 'protocol.JsonRpcRequest'],
