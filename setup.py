@@ -4,7 +4,7 @@
 from setuptools import find_packages, setup
 
 
-if __name__ == '__main__':
+def main() -> None:
     with open('README.md') as file:
         long_description = file.read()
 
@@ -13,7 +13,7 @@ if __name__ == '__main__':
 
     setup(
         name='aiohttp-rpc',
-        version='1.1.1',
+        version='1.2.0',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',
@@ -27,7 +27,7 @@ if __name__ == '__main__':
         description='A simple JSON-RPC for aiohttp',
         long_description=long_description,
         long_description_content_type='text/markdown',
-        python_requires='>=3.6.5',
+        python_requires='>=3.8.1',
         packages=packages,
         package_data=package_data,
         classifiers=[
@@ -42,10 +42,10 @@ if __name__ == '__main__':
             'Operating System :: OS Independent',
             'Programming Language :: Python',
             'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.6',
-            'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: 3.9',
+            'Programming Language :: Python :: 3.10',
+            'Programming Language :: Python :: 3.11',
             'Framework :: AsyncIO',
             'Framework :: aiohttp',
             'Topic :: Internet',
@@ -58,3 +58,7 @@ if __name__ == '__main__':
             'GitHub: repo': 'https://github.com/expert-m/aiohttp-rpc',
         },
     )
+
+
+if __name__ == '__main__':
+    main()
