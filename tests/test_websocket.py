@@ -14,7 +14,7 @@ async def test_args(aiohttp_client):
 
     client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client, connection_check_interval=None) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.call('method') == [1, 2, 1]
         assert await rpc.call('method', 1) == [1, 2, 1]
 
@@ -31,11 +31,11 @@ async def test_batch(aiohttp_client):
 
     client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client, connection_check_interval=None) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.batch(('method_1', 'method_2',)) == ([1, 1], 1,)
         assert await rpc.batch((('method_1', 4), ('method_1', [], {'a': 5},),)) == ([1, 4], [1, 5],)
 
-    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client, connection_check_interval=None) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         assert await rpc.batch_notify(('method_1', 'method_2',)) is None
         assert await rpc.batch_notify((('method_1', 4), ('method_1', [], {'a': 5},),)) is None
 
@@ -50,7 +50,7 @@ async def test_several_requests(aiohttp_client):
 
     client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client, connection_check_interval=None) as rpc:
+    async with aiohttp_rpc.WsJsonRpcClient('/rpc', session=client) as rpc:
         started_at = datetime.datetime.now()
 
         result = await asyncio.gather(*(
@@ -94,7 +94,6 @@ async def test_ws_client_for_server_response(aiohttp_client, mocker):
             '/rpc',
             session=client,
             json_request_handler=json_request_handler,
-            connection_check_interval=None,
     ) as rpc:
         json_request_handler = mocker.patch.object(rpc, '_json_request_handler', side_effect=rpc._json_request_handler)
         await rpc.method()

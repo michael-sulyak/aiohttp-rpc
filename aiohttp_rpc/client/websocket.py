@@ -20,7 +20,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
     url: typing.Optional[str]
     ws_connect: typing.Optional[typedefs.WSConnectType]
     ws_connect_kwargs: dict
-    timeout: typing.Optional[float]
+    _timeout: typing.Optional[float]
+    _timeout_for_data_receiving: typing.Optional[float]
     _connection_check_interval: typing.Optional[float]
     _pending: typing.Dict[typing.Any, asyncio.Future]
     _message_worker: typing.Optional[asyncio.Future] = None
@@ -30,20 +31,23 @@ class WsJsonRpcClient(BaseJsonRpcClient):
     _json_request_handler: typing.Optional[typing.Callable] = None
     _unprocessed_json_response_handler: typing.Optional[typing.Callable] = None
     _background_tasks: typing.Set
+    _is_closed: bool = True
 
     def __init__(self,
                  url: typing.Optional[str] = None, *,
                  session: typing.Optional[ClientSession] = None,
                  ws_connect: typing.Optional[typedefs.WSConnectType] = None,
                  timeout: typing.Optional[float] = 5,
-                 connection_check_interval: typing.Optional[float] = 1,
+                 timeout_for_data_receiving: typing.Optional[float] = None,
+                 connection_check_interval: typing.Optional[float] = 5,
                  json_request_handler: typing.Optional[typing.Callable] = None,
                  unprocessed_json_response_handler: typing.Optional[typing.Callable] = None,
                  **ws_connect_kwargs) -> None:
         assert (session is not None) or (url is not None and session is None) or (ws_connect is not None)
 
         self.url = url
-        self.timeout = timeout
+        self._timeout = timeout
+        self._timeout_for_data_receiving = timeout_for_data_receiving
         self._connection_check_interval = connection_check_interval
 
         self.session = session
@@ -59,6 +63,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self._background_tasks = set()
 
     async def connect(self) -> None:
+        self._is_closed = False
+
         if self.session is None and self.ws_connect is None:
             self.session = ClientSession(json_serialize=self.json_serialize)
 
@@ -77,6 +83,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             self._check_worker = asyncio.create_task(self._check_ws_connection())
 
     async def disconnect(self) -> None:
+        self._is_closed = True
+
         if self.ws_connect is not None and not self._ws_connect_is_outer:
             await self.ws_connect.close()
 
@@ -84,9 +92,13 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             await self.session.close()
 
         if self._message_worker is not None:
-            await self._message_worker
+            if self._ws_connect_is_outer:
+                await asyncio.wait_for(self._message_worker, timeout=60)
+            else:
+                await self._message_worker
 
         if self._check_worker is not None:
+            self._check_worker.cancel()
             await self._check_worker
 
     async def send_json(self,
@@ -121,8 +133,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         if not request_ids:
             return None, None
 
-        if self.timeout is not None:
-            future = asyncio.wait_for(future, timeout=self.timeout)  # type: ignore
+        if self._timeout is not None:
+            future = asyncio.wait_for(future, timeout=self._timeout)  # type: ignore
 
         result = await future
 
@@ -150,44 +162,56 @@ class WsJsonRpcClient(BaseJsonRpcClient):
     async def _handle_ws_messages(self) -> None:
         assert self.ws_connect is not None
 
-        ws_msg_types_to_stop = (
-            http_websocket.WSMsgType.CLOSE,
-            http_websocket.WSMsgType.CLOSING,
-            http_websocket.WSMsgType.CLOSED,
-            http_websocket.WSMsgType.ERROR,
-        )
-
-        ws_msg: http_websocket.WSMessage
-
-        async for ws_msg in self.ws_connect:
-            if ws_msg.type == http_websocket.WSMsgType.TEXT:
-                try:
-                    task = asyncio.create_task(self._handle_single_ws_message(ws_msg))
-                except asyncio.CancelledError as e:
-                    error = errors.InternalError(utils.get_exc_message(e)).with_traceback()
-                    self._notify_all_about_error(error)
+        while True:
+            try:
+                ws_msg: http_websocket.WSMessage = await self.ws_connect.receive(
+                    timeout=self._timeout_for_data_receiving,
+                )
+            except asyncio.TimeoutError:
+                if self._is_closed:
                     break
-                except Exception:
-                    logger.warning('Can\'t process WS message.', exc_info=True)
                 else:
-                    # To avoid a task disappearing mid execution:
-                    self._background_tasks.add(task)
-                    task.add_done_callback(self._background_tasks.discard)
-            elif ws_msg.type in ws_msg_types_to_stop:
-                error = errors.ServerError('Connection is closed')
+                    continue
+
+            if ws_msg.type in (
+                    http_websocket.WSMsgType.CLOSE,
+                    http_websocket.WSMsgType.CLOSING,
+                    http_websocket.WSMsgType.CLOSED,
+            ):
+                break
+
+            if ws_msg.type != http_websocket.WSMsgType.TEXT:
+                continue
+
+            try:
+                task = asyncio.create_task(self._handle_single_ws_message(ws_msg))
+            except asyncio.CancelledError as e:
+                error = errors.InternalError(utils.get_exc_message(e)).with_traceback()
                 self._notify_all_about_error(error)
+                break
+            except Exception:
+                logger.warning('Can\'t process WS message.', exc_info=True)
+            else:
+                # To avoid a task disappearing mid execution:
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
+
+            if self._is_closed:
                 break
 
     async def _check_ws_connection(self) -> None:
         assert self.ws_connect is not None
 
-        while True:
-            if self.ws_connect.closed:
-                error = errors.ServerError('Connection is closed')
-                self._notify_all_about_error(error)
-                break
+        try:
+            while not self._is_closed:
+                if self.ws_connect.closed:
+                    error = errors.ServerError('Connection is closed')
+                    self._notify_all_about_error(error)
+                    break
 
-            await asyncio.sleep(self._connection_check_interval)  # type: ignore
+                await asyncio.sleep(self._connection_check_interval)  # type: ignore
+        except asyncio.CancelledError:
+            pass
 
     async def _handle_single_ws_message(self, ws_msg: http_websocket.WSMessage) -> None:
         if ws_msg.type != http_websocket.WSMsgType.text:
