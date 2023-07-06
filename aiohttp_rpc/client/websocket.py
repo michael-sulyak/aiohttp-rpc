@@ -20,8 +20,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
     url: typing.Optional[str]
     ws_connect: typing.Optional[typedefs.WSConnectType]
     ws_connect_kwargs: dict
-    timeout: typing.Optional[int]
-    _connection_check_interval: typing.Optional[int]
+    timeout: typing.Optional[float]
+    _connection_check_interval: typing.Optional[float]
     _pending: typing.Dict[typing.Any, asyncio.Future]
     _message_worker: typing.Optional[asyncio.Future] = None
     _check_worker: typing.Optional[asyncio.Future] = None
@@ -35,8 +35,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                  url: typing.Optional[str] = None, *,
                  session: typing.Optional[ClientSession] = None,
                  ws_connect: typing.Optional[typedefs.WSConnectType] = None,
-                 timeout: typing.Optional[int] = 5,
-                 connection_check_interval: typing.Optional[int] = 1,
+                 timeout: typing.Optional[float] = 5,
+                 connection_check_interval: typing.Optional[float] = 1,
                  json_request_handler: typing.Optional[typing.Callable] = None,
                  unprocessed_json_response_handler: typing.Optional[typing.Callable] = None,
                  **ws_connect_kwargs) -> None:
@@ -187,7 +187,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                 self._notify_all_about_error(error)
                 break
 
-            await asyncio.sleep(self._connection_check_interval)
+            await asyncio.sleep(self._connection_check_interval)  # type: ignore
 
     async def _handle_single_ws_message(self, ws_msg: http_websocket.WSMessage) -> None:
         if ws_msg.type != http_websocket.WSMsgType.text:
