@@ -37,7 +37,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                  url: typing.Optional[str] = None, *,
                  session: typing.Optional[ClientSession] = None,
                  ws_connect: typing.Optional[typedefs.WSConnectType] = None,
-                 timeout: typing.Optional[float] = 5,
+                 timeout: typing.Optional[float] = 60,
                  timeout_for_data_receiving: typing.Optional[float] = None,
                  connection_check_interval: typing.Optional[float] = 5,
                  json_request_handler: typing.Optional[typing.Callable] = None,
