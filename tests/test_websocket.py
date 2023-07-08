@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 
-
 import aiohttp_rpc
 from tests import utils
 

@@ -112,7 +112,7 @@ class BaseJsonRpcClient(abc.ABC):
                            batch_request: protocol.JsonRpcBatchRequest,
                            **kwargs) -> typing.Optional[protocol.JsonRpcBatchResponse]:
         if not batch_request.requests:
-            raise errors.InvalidRequest('You can not send an empty batch request.')
+            raise errors.InvalidRequest('You can\'t send an empty batch request.')
 
         is_notification = batch_request.is_notification
 

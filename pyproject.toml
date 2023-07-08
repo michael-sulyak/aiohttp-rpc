@@ -9,11 +9,11 @@ python = "^3.8.1"
 aiohttp = "^3.8.4"
 
 [tool.poetry.dev-dependencies]
-pytest = "^7.1.2"
-tox = "^4.4.7"
+pytest = "^7.4.0"
+tox = "^4.6.3"
 pytest-asyncio = "^0.21.0"
 pytest-aiohttp = "^1.0.4"
-pytest-mock = "^3.8.2"
+pytest-mock = "^3.11.1"
 flake8 = "^6.0.0"
 mypy = "^1.1.1"
 
