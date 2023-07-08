@@ -13,7 +13,7 @@ def main() -> None:
 
     setup(
         name='aiohttp-rpc',
-        version='1.2.0',
+        version='1.3.0b1',
         author='Michael Sulyak',
         url='https://github.com/expert-m/aiohttp-rpc/',
         author_email='michael@sulyak.info',
