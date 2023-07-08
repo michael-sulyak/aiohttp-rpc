@@ -75,12 +75,12 @@ import asyncio
 
 async def run():
     async with aiohttp_rpc.JsonRpcClient('http://0.0.0.0:8080/rpc') as rpc:
-        print('1', await rpc.ping())
-        print('4', await rpc.echo('one', 'two'))
-        print('3', await rpc.call('echo', three='3'))
-        print('5', await rpc.notify('echo', 123))
-        print('6', await rpc.get_methods())
-        print('7', await rpc.batch([
+        print('#1', await rpc.ping())
+        print('#2', await rpc.echo('one', 'two'))
+        print('#3', await rpc.call('echo', three='3'))
+        print('#4', await rpc.notify('echo', 123))
+        print('#5', await rpc.get_methods())
+        print('#6', await rpc.batch([
             ['echo', 2], 
             'echo2',
             'ping',
@@ -92,12 +92,12 @@ loop.run_until_complete(run())
 
 This prints:
 ```text
-1 pong
-4 {'args': ['one', 'two'], 'kwargs': {}}
-3 {'args': [], 'kwargs': {'three': '3'}}
-5 None
-6 {'get_method': {'doc': None, 'args': ['name'], 'kwargs': []}, 'get_methods': {'doc': None, 'args': [], 'kwargs': []}, 'ping': {'doc': None, 'args': ['rpc_request'], 'kwargs': []}, 'echo': {'doc': None, 'args': [], 'kwargs': []}}
-7 ({'args': [2], 'kwargs': {}}, JsonRpcError(-32601, 'The method does not exist / is not available.'), 'pong')
+#1 pong
+#2 {'args': ['one', 'two'], 'kwargs': {}}
+#3 {'args': [], 'kwargs': {'three': '3'}}
+#4 None
+#5 {'get_method': {'doc': None, 'args': ['name'], 'kwargs': []}, 'get_methods': {'doc': None, 'args': [], 'kwargs': []}, 'ping': {'doc': None, 'args': ['rpc_request'], 'kwargs': []}, 'echo': {'doc': None, 'args': [], 'kwargs': []}}
+#6 ({'args': [2], 'kwargs': {}}, JsonRpcError(-32601, 'The method does not exist / is not available.'), 'pong')
 ```
 
 [back to top](#table-of-contents)
