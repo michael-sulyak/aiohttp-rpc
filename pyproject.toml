@@ -6,7 +6,7 @@ authors = ["expert-m <michael@sulyak.info>"]
 
 [tool.poetry.dependencies]
 python = "^3.8.1"
-aiohttp = "^3.8.4"
+aiohttp = "^3.8.5"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.4.0"
