@@ -48,7 +48,7 @@ class JsonRpcClient(BaseJsonRpcClient):
             raise errors.ServerError(f'Server responded with code {http_response.status}.') from e
 
         try:
-            json_response = await http_response.json()
+            json_response = await http_response.json(loads=self.json_deserialize)
         except aiohttp.ContentTypeError as e:
             raise errors.ParseError(utils.get_exc_message(e)) from e
 

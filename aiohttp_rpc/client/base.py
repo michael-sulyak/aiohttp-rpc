@@ -16,7 +16,6 @@ class BaseJsonRpcClient(abc.ABC):
         error.code: error
         for error in errors.DEFAULT_KNOWN_ERRORS
     }
-    json_serialize: typing.Callable = utils.json_serialize
 
     async def __aenter__(self) -> 'BaseJsonRpcClient':
         await self.connect()
@@ -136,6 +135,14 @@ class BaseJsonRpcClient(abc.ABC):
                         without_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         pass
+
+    @staticmethod
+    def json_serialize(data: typing.Any) -> str:
+        return utils.json_serialize(data)
+
+    @staticmethod
+    def json_deserialize(data: str) -> typing.Any:
+        return utils.json_deserialize(data)
 
     @staticmethod
     def _parse_method_description(method_description: typedefs.ClientMethodDescriptionType, *,

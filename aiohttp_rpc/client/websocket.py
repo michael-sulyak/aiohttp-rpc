@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import typing
 
@@ -174,9 +173,9 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                     continue
 
             if ws_msg.type in (
-                    http_websocket.WSMsgType.CLOSE,
-                    http_websocket.WSMsgType.CLOSING,
-                    http_websocket.WSMsgType.CLOSED,
+                http_websocket.WSMsgType.CLOSE,
+                http_websocket.WSMsgType.CLOSING,
+                http_websocket.WSMsgType.CLOSED,
             ):
                 break
 
@@ -218,7 +217,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             return
 
         try:
-            json_response = json.loads(ws_msg.data)
+            json_response = self.json_deserialize(ws_msg.data)
         except Exception:
             logger.warning('Can\'t parse json.', exc_info=True)
             return

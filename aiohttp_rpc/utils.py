@@ -106,3 +106,4 @@ def collect_batch_result(batch_request: 'protocol.JsonRpcBatchRequest',
 
 
 json_serialize = partial(json.dumps, default=lambda x: repr(x))
+json_deserialize = json.loads
