@@ -13,9 +13,9 @@ def main() -> None:
 
     setup(
         name='aiohttp-rpc',
-        version='1.3.1',
+        version='1.3.2',
         author='Michael Sulyak',
-        url='https://github.com/expert-m/aiohttp-rpc/',
+        url='https://github.com/michael-sulyak/aiohttp-rpc/',
         author_email='michael@sulyak.info',
         keywords=[
             'aiohttp', 'asyncio', 'json-rpc', 'rpc',
@@ -55,8 +55,8 @@ def main() -> None:
             'Topic :: Software Development :: Libraries :: Python Modules',
         ],
         project_urls={
-            'GitHub: issues': 'https://github.com/expert-m/aiohttp-rpc/issues',
-            'GitHub: repo': 'https://github.com/expert-m/aiohttp-rpc',
+            'GitHub: issues': 'https://github.com/michael-sulyak/aiohttp-rpc/issues',
+            'GitHub: repo': 'https://github.com/michael-sulyak/aiohttp-rpc',
         },
     )
 
