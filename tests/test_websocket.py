@@ -1,6 +1,8 @@
 import asyncio
 import datetime
 
+from aiohttp import web_ws
+
 import aiohttp_rpc
 from tests import utils
 
@@ -91,9 +93,9 @@ async def test_ws_client_for_server_response(aiohttp_client, mocker):
             future.set_result(results)
 
     async with aiohttp_rpc.WsJsonRpcClient(
-            '/rpc',
-            session=client,
-            json_request_handler=json_request_handler,
+        '/rpc',
+        session=client,
+        json_request_handler=json_request_handler,
     ) as rpc:
         json_request_handler = mocker.patch.object(rpc, '_json_request_handler', side_effect=rpc._json_request_handler)
         await rpc.method()
@@ -103,3 +105,44 @@ async def test_ws_client_for_server_response(aiohttp_client, mocker):
         assert results[0]['method'] == 'ping'
         assert results[1]['method'] == 'ping'
         assert results[2]['method'] == 'ping'
+
+
+async def test_ws_response_kwargs(aiohttp_client):
+    rpc_server = aiohttp_rpc.WsJsonRpcServer(
+        ws_response_kwargs=dict(
+            timeout=10.0,
+            max_msg_size=2048,
+        ),
+    )
+
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
+
+    async with aiohttp_rpc.WsJsonRpcClient(
+        '/rpc',
+        session=client,
+    ):
+        rpc_websocket: web_ws.WebSocketResponse
+        for rpc_websocket in rpc_server.rcp_websockets:
+            assert rpc_websocket._timeout == 10.0
+            assert rpc_websocket._max_msg_size == 2048
+
+
+async def test_ws_response_cls(aiohttp_client):
+    class CustomWebSocketResponse(web_ws.WebSocketResponse):
+        def __init__(self, **kwargs):
+            super().__init__(timeout=10.0, max_msg_size=2048, **kwargs)
+
+    rpc_server = aiohttp_rpc.WsJsonRpcServer(
+        ws_response_cls=CustomWebSocketResponse,
+    )
+
+    client = await utils.make_ws_client(aiohttp_client, rpc_server)
+
+    async with aiohttp_rpc.WsJsonRpcClient(
+        '/rpc',
+        session=client,
+    ):
+        for rpc_websocket in rpc_server.rcp_websockets:
+            assert isinstance(rpc_websocket, CustomWebSocketResponse)
+            assert rpc_websocket._timeout == 10.0
+            assert rpc_websocket._max_msg_size == 2048
