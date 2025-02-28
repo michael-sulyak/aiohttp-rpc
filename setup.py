@@ -13,7 +13,7 @@ def main() -> None:
 
     setup(
         name='aiohttp-rpc',
-        version='1.3.2',
+        version='1.3.3',
         author='Michael Sulyak',
         url='https://github.com/michael-sulyak/aiohttp-rpc/',
         author_email='michael@sulyak.info',
@@ -47,6 +47,8 @@ def main() -> None:
             'Programming Language :: Python :: 3.9',
             'Programming Language :: Python :: 3.10',
             'Programming Language :: Python :: 3.11',
+            'Programming Language :: Python :: 3.12',
+            'Programming Language :: Python :: 3.13',
             'Framework :: AsyncIO',
             'Framework :: aiohttp',
             'Topic :: Internet',
