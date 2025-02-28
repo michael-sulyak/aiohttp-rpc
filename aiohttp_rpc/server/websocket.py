@@ -16,16 +16,22 @@ __all__ = (
 
 class WsJsonRpcServer(BaseJsonRpcServer):
     rcp_websockets: weakref.WeakSet
+    ws_response_cls: typing.Type[web_ws.WebSocketResponse]
+    ws_response_kwargs: typing.Dict
     _json_response_handler: typing.Optional[typing.Callable] = None
     _background_tasks: typing.Set
 
     def __init__(self,
                  *args,
                  json_response_handler: typing.Optional[typing.Callable] = None,
+                 ws_response_cls: typing.Type[web_ws.WebSocketResponse] = web_ws.WebSocketResponse,
+                 ws_response_kwargs: typing.Optional[typing.Dict] = None,
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.rcp_websockets = weakref.WeakSet()
+        self.ws_response_cls = ws_response_cls
+        self.ws_response_kwargs = ws_response_kwargs or {}
         self._json_response_handler = json_response_handler
         self._background_tasks = set()
 
@@ -46,7 +52,7 @@ class WsJsonRpcServer(BaseJsonRpcServer):
     async def _handle_ws_request(self, http_request: web.Request) -> web_ws.WebSocketResponse:
         from aiohttp_rpc import WsJsonRpcClient
 
-        ws_connect = web_ws.WebSocketResponse()
+        ws_connect = self.ws_response_cls(**self.ws_response_kwargs)
         await ws_connect.prepare(http_request)
 
         self.rcp_websockets.add(ws_connect)
