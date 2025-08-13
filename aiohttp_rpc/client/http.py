@@ -1,17 +1,18 @@
+import json
 import typing
 
 import aiohttp
 
-from .base import BaseJsonRpcClient
+from .base import BaseJSONRPCClient
 from .. import errors, utils
 
 
 __all__ = (
-    'JsonRpcClient',
+    'JSONRPCClient',
 )
 
 
-class JsonRpcClient(BaseJsonRpcClient):
+class JSONRPCClient(BaseJSONRPCClient):
     url: str
     session: typing.Optional[aiohttp.ClientSession]
     request_kwargs: dict
@@ -21,6 +22,7 @@ class JsonRpcClient(BaseJsonRpcClient):
                  url: str, *,
                  session: typing.Optional[aiohttp.ClientSession] = None,
                  **request_kwargs) -> None:
+        super().__init__()
         self.url = url
         self.session = session
         self.request_kwargs = request_kwargs
@@ -42,17 +44,19 @@ class JsonRpcClient(BaseJsonRpcClient):
 
         http_response = await self.session.post(self.url, json=data, **kwargs)
 
-        try:
-            http_response.raise_for_status()
-        except aiohttp.ClientResponseError as e:
-            raise errors.ServerError(f'Server responded with code {http_response.status}.') from e
-
-        try:
-            json_response = await http_response.json(loads=self.json_deserialize)
-        except aiohttp.ContentTypeError as e:
-            raise errors.ParseError(utils.get_exc_message(e)) from e
-
         if without_response:
+            # Note: Drain so the connection can be reused.
+            await http_response.read()
             return None, None
+
+        raw_data = await http_response.read()
+
+        if raw_data:
+            try:
+                json_response = await http_response.json(loads=self.json_deserialize)
+            except (aiohttp.ContentTypeError, json.JSONDecodeError,) as e:
+                raise errors.ParseError(utils.get_exc_message(e)) from e
+        else:
+            json_response = None
 
         return json_response, {'http_response': http_response}

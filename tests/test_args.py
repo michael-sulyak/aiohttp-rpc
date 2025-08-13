@@ -11,7 +11,7 @@ async def test_args(aiohttp_client):
     def method(a=1):
         return [1, 2, a]
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
     rpc_server.add_method(method)
 
     assert await rpc_server.call('method') == [1, 2, 1]
@@ -19,7 +19,7 @@ async def test_args(aiohttp_client):
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         assert await rpc.call('method') == [1, 2, 1]
         assert await rpc.call('method', 1) == [1, 2, 1]
 
@@ -28,7 +28,7 @@ async def test_kwargs(aiohttp_client):
     def method(a=1, *, b=2):
         return [1, a, b]
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
     rpc_server.add_method(method)
 
     with pytest.raises(errors.InvalidParams):
@@ -39,7 +39,7 @@ async def test_kwargs(aiohttp_client):
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         assert await rpc.call('method', a=1, b=2) == [1, 1, 2]
 
         with pytest.raises(errors.InvalidParams):
@@ -50,7 +50,7 @@ async def test_varargs(aiohttp_client):
     def method(a=1, *args):
         return [a, *args]
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
     rpc_server.add_method(method)
 
     assert await rpc_server.call('method') == [1]
@@ -59,7 +59,7 @@ async def test_varargs(aiohttp_client):
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         assert await rpc.call('method') == [1]
         assert await rpc.call('method', 2) == [2]
         assert await rpc.call('method', 2, 3) == [2, 3]
@@ -69,7 +69,7 @@ async def test_varkw(aiohttp_client):
     def method(a=1, **kwargs):
         return [a, kwargs]
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
     rpc_server.add_method(method)
 
     with pytest.raises(errors.InvalidParams):
@@ -79,7 +79,7 @@ async def test_varkw(aiohttp_client):
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         with pytest.raises(errors.InvalidParams):
             await rpc.call('method', 1, 2)
 
@@ -93,18 +93,18 @@ async def test_extra_kwargs(aiohttp_client):
     def method_2(*, rpc_request):
         return rpc_request.__class__.__name__
 
-    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+    rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(aiohttp_rpc.middlewares.inject_request_middleware,))
     rpc_server.add_method(method)
     rpc_server.add_method(method_2)
 
-    assert await rpc_server.call('method', extra_args={'rpc_request': 123}), 123
-    assert await rpc_server.call('method_2', extra_args={'rpc_request': 123}), 123
+    assert await rpc_server.call('method', extra_args={'rpc_request': 123}) == 'int'
+    assert await rpc_server.call('method_2', extra_args={'rpc_request': '123'}) == 'str'
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        assert await rpc.call('method') == 'JsonRpcRequest'
-        assert await rpc.call('method_2') == 'JsonRpcRequest'
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        assert await rpc.call('method') == 'JSONRPCRequest'
+        assert await rpc.call('method_2') == 'JSONRPCRequest'
 
 
 async def test_extra_kwargs_with_class(aiohttp_client):
@@ -115,13 +115,13 @@ async def test_extra_kwargs_with_class(aiohttp_client):
         def __str__(self):
             return self.rpc_request.__class__.__name__
 
-    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
-    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(TestClass, prepare_result=str))
+    rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(aiohttp_rpc.middlewares.inject_request_middleware,))
+    rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(TestClass, prepare_result=str))
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        assert await rpc.call('TestClass') == 'JsonRpcRequest'
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        assert await rpc.call('TestClass') == 'JSONRPCRequest'
 
 
 async def test_extra_kwargs_with_wrapper(aiohttp_client):
@@ -140,23 +140,48 @@ async def test_extra_kwargs_with_wrapper(aiohttp_client):
     def method_2():
         return True
 
-    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+    rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(aiohttp_rpc.middlewares.inject_request_middleware,))
     rpc_server.add_methods((method, method_2,))
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        assert await rpc.call('method') == 'JsonRpcRequest'
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        assert await rpc.call('method') == 'JSONRPCRequest'
         assert await rpc.call('method_2') is True
 
 
 async def test_builtin_funcs(aiohttp_client):
-    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(aiohttp_rpc.middlewares.extra_args_middleware,))
+    rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(aiohttp_rpc.middlewares.inject_request_middleware,))
     rpc_server.add_method(sum)
-    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(zip, prepare_result=list))
+    rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(zip, prepare_result=list))
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        assert await rpc.sum([1, 2, 3]) == 6
-        assert await rpc.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        assert await rpc.methods.sum([1, 2, 3]) == 6
+        assert await rpc.methods.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
+
+
+def test_empty_args():
+    requests_1 = aiohttp_rpc.JSONRPCRequest(method_name='echo')
+    request_2 = aiohttp_rpc.JSONRPCRequest(method_name='echo', args=[])
+    assert 'params' not in requests_1.dump()
+    assert 'params' not in request_2.dump()
+
+
+async def test_echo_with_explicit_empty_args(aiohttp_client):
+    def echo(*args):
+        return list(args)
+
+    server = aiohttp_rpc.JSONRPCServer()
+    server.add_method(echo)
+
+    from tests import utils
+
+    client = await utils.make_client(aiohttp_client, server)
+
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        assert await rpc.call('echo') == []
+        # Explicit empty positional via batch descriptor (len=3)
+        result = await rpc.batch(rpc.methods.echo.request([], {}))
+        assert result == ([[], {}],)

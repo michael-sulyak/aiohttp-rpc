@@ -7,12 +7,12 @@ from .. import errors, utils
 
 
 __all__ = (
-    'BaseJsonRpcMethod',
-    'JsonRpcMethod',
+    'BaseJSONRPCMethod',
+    'JSONRPCMethod',
 )
 
 
-class BaseJsonRpcMethod(abc.ABC):
+class BaseJSONRPCMethod(abc.ABC):
     name: str
     doc: typing.Optional[str] = None
     supported_args: typing.Tuple[str, ...] = ()
@@ -34,10 +34,10 @@ class BaseJsonRpcMethod(abc.ABC):
         if self.supported_kwargs:
             args += ', '.join(self.supported_kwargs)
 
-        return f'JsonRpcMethod({self.name}({args}))'
+        return f'JSONRPCMethod({self.name}({args}))'
 
 
-class JsonRpcMethod(BaseJsonRpcMethod):
+class JSONRPCMethod(BaseJSONRPCMethod):
     is_coroutine: bool
     is_class: bool
     _add_extra_args: bool
@@ -74,7 +74,8 @@ class JsonRpcMethod(BaseJsonRpcMethod):
             result = self.func(*args, **kwargs)
 
         if self._prepare_result is not None:
-            result = self._prepare_result(result)
+            maybe_coro = self._prepare_result(result)
+            result = await maybe_coro if inspect.isawaitable(maybe_coro) else maybe_coro
 
         return result
 
@@ -94,16 +95,12 @@ class JsonRpcMethod(BaseJsonRpcMethod):
 
     @staticmethod
     def _unwrap_func(func: typing.Callable) -> typing.Callable:
-        i = 0
-
-        while hasattr(func, '__wrapped__'):
-            func = func.__wrapped__  # type: ignore
-            i += 1
-
-            if i > 1_000:
-                raise errors.InternalError('The method has too many wrappers.')
-
-        return func
+        try:
+            return inspect.unwrap(func)
+        except Exception as e:
+            raise errors.InternalError(
+                data={'details': f'Failed to unwrap function: {utils.get_exc_message(e)}'},
+            ) from e
 
     def _add_extra_args_in_args_and_kwargs(self,
                                            args: typing.Sequence,

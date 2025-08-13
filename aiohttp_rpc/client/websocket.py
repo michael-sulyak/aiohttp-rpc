@@ -4,18 +4,18 @@ import typing
 
 from aiohttp import ClientSession, http_websocket, web_ws
 
-from .base import BaseJsonRpcClient
+from .base import BaseJSONRPCClient
 from .. import errors, typedefs, utils
 
 
 __all__ = (
-    'WsJsonRpcClient',
+    'WSJSONRPCClient',
 )
 
 logger = logging.getLogger(__name__)
 
 
-class WsJsonRpcClient(BaseJsonRpcClient):
+class WSJSONRPCClient(BaseJSONRPCClient):
     url: typing.Optional[str]
     ws_connect: typing.Optional[typedefs.WSConnectType]
     ws_connect_kwargs: dict
@@ -27,8 +27,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
     _check_worker: typing.Optional[asyncio.Future] = None
     _session_is_outer: bool
     _ws_connect_is_outer: bool
-    _json_request_handler: typing.Optional[typing.Callable] = None
-    _unprocessed_json_response_handler: typing.Optional[typing.Callable] = None
+    _json_requests_handler: typing.Optional[typedefs.WSJSONRequestsHandler]
+    _unprocessed_json_responses_handler: typing.Optional[typedefs.UnprocessedWSJSONResponsesHandler]
     _background_tasks: typing.Set
     _is_closed: bool = True
 
@@ -37,12 +37,14 @@ class WsJsonRpcClient(BaseJsonRpcClient):
                  session: typing.Optional[ClientSession] = None,
                  ws_connect: typing.Optional[typedefs.WSConnectType] = None,
                  timeout: typing.Optional[float] = 60,
-                 timeout_for_data_receiving: typing.Optional[float] = None,
+                 timeout_for_data_receiving: typing.Optional[float] = 60,
                  connection_check_interval: typing.Optional[float] = 5,
-                 json_request_handler: typing.Optional[typing.Callable] = None,
-                 unprocessed_json_response_handler: typing.Optional[typing.Callable] = None,
+                 json_requests_handler: typing.Optional[typedefs.WSJSONRequestsHandler] = None,
+                 unprocessed_json_responses_handler: typing.Optional[typedefs.UnprocessedWSJSONResponsesHandler] = None,
                  **ws_connect_kwargs) -> None:
-        assert (session is not None) or (url is not None and session is None) or (ws_connect is not None)
+        assert ws_connect is not None or url is not None
+
+        super().__init__()
 
         self.url = url
         self._timeout = timeout
@@ -57,8 +59,8 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         self._ws_connect_is_outer = ws_connect is not None  # We don't close an outer WS connection.
 
         self._pending = {}
-        self._json_request_handler = json_request_handler
-        self._unprocessed_json_response_handler = unprocessed_json_response_handler
+        self._json_requests_handler = json_requests_handler
+        self._unprocessed_json_responses_handler = unprocessed_json_responses_handler
         self._background_tasks = set()
 
     async def connect(self) -> None:
@@ -91,56 +93,74 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             await self.session.close()
 
         if self._message_worker is not None:
-            if self._ws_connect_is_outer:
-                await asyncio.wait_for(self._message_worker, timeout=60)
-            else:
-                await self._message_worker
+            try:
+                if self._ws_connect_is_outer:
+                    await asyncio.wait_for(self._message_worker, timeout=60)
+                else:
+                    await self._message_worker
+            except asyncio.TimeoutError:
+                logger.warning('Timed out waiting for message worker to finish on disconnect.')
 
         if self._check_worker is not None:
             self._check_worker.cancel()
             await self._check_worker
 
+        for task in tuple(self._background_tasks):
+            task.cancel()
+
+        await asyncio.gather(*self._background_tasks, return_exceptions=True)
+
+        self._background_tasks.clear()
+
     async def send_json(self,
                         data: typing.Any, *,
                         without_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
-        assert self.ws_connect is not None
 
-        if without_response:
+        async def _send(text: str, **kw):
+            assert self.ws_connect is not None
+
             try:
-                await self.ws_connect.send_str(self.json_serialize(data), **kwargs)
-            except ConnectionResetError as e:
-                error = errors.ServerError(utils.get_exc_message(e)).with_traceback()
+                await self.ws_connect.send_str(text, **kw)
+            except (ConnectionResetError, RuntimeError, OSError) as e:
+                logger.warning('WS send failed.', exc_info=True)
+                error = errors.ServerError(data={'details': utils.get_exc_message(e)})
                 self._notify_all_about_error(error)
                 raise error
 
+        if without_response:
+            await _send(self.json_serialize(data), **kwargs)
             return None, None
 
         request_ids = self._get_ids_from_json(data)
-        future: asyncio.Future = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future = loop.create_future()
 
         for request_id in request_ids:
             self._pending[request_id] = future
 
-        try:
-            await self.ws_connect.send_str(self.json_serialize(data), **kwargs)
-        except ConnectionResetError as e:
-            error = errors.ServerError(utils.get_exc_message(e)).with_traceback()
-            self._notify_all_about_error(error)
-            raise error
+        await _send(self.json_serialize(data), **kwargs)
 
         if not request_ids:
             return None, None
 
-        if self._timeout is not None:
-            future = asyncio.wait_for(future, timeout=self._timeout)  # type: ignore
+        try:
+            result = await asyncio.wait_for(future, timeout=self._timeout) if self._timeout is not None else future
+        except asyncio.TimeoutError as e:
+            for request_id in request_ids:
+                self._pending.pop(request_id, None)
 
-        result = await future
+            raise errors.RequestTimeoutError from e
+        except Exception:
+            for request_id in request_ids:
+                self._pending.pop(request_id, None)
+
+            raise
 
         return result, None
 
     @staticmethod
-    def _get_ids_from_json(data: typing.Any) -> typing.Tuple[typedefs.JsonRpcIdType, ...]:
+    def _get_ids_from_json(data: typing.Any) -> typing.Tuple[typedefs.JSONRPCIDType, ...]:
         if not data:
             return ()
 
@@ -184,8 +204,9 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
             try:
                 task = asyncio.create_task(self._handle_single_ws_message(ws_msg))
-            except asyncio.CancelledError as e:
-                error = errors.InternalError(utils.get_exc_message(e)).with_traceback()
+            except asyncio.CancelledError:
+                logger.warning('Cancelled message handler on disconnect.', exc_info=True)
+                error = errors.InternalError()
                 self._notify_all_about_error(error)
                 break
             except Exception:
@@ -204,7 +225,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         try:
             while not self._is_closed:
                 if self.ws_connect.closed:
-                    error = errors.ServerError('Connection is closed')
+                    error = errors.ServerError(data={'details': 'Connection is closed.'})
                     self._notify_all_about_error(error)
                     break
 
@@ -213,7 +234,7 @@ class WsJsonRpcClient(BaseJsonRpcClient):
             pass
 
     async def _handle_single_ws_message(self, ws_msg: http_websocket.WSMessage) -> None:
-        if ws_msg.type != http_websocket.WSMsgType.text:
+        if ws_msg.type != http_websocket.WSMsgType.TEXT:
             return
 
         try:
@@ -238,36 +259,47 @@ class WsJsonRpcClient(BaseJsonRpcClient):
         })
 
     async def _handle_single_json_response(self, json_response: typing.Mapping, *, ws_msg: web_ws.WSMessage) -> None:
+        assert self.ws_connect is not None
+
         if 'method' in json_response:
-            if self._json_request_handler is not None:
-                await self._json_request_handler(
+            if self._json_requests_handler is not None:
+                await self._json_requests_handler(
                     ws_connect=self.ws_connect,
                     ws_msg=ws_msg,
-                    json_request=json_response,
+                    json_requests=(json_response,),
                 )
         elif 'id' in json_response and json_response['id'] in self._pending:
             self._notify_about_result(json_response['id'], json_response)
-        elif self._unprocessed_json_response_handler is not None:
-            self._unprocessed_json_response_handler(
+        elif self._unprocessed_json_responses_handler is not None:
+            await self._unprocessed_json_responses_handler(
                 ws_connect=self.ws_connect,
                 ws_msg=ws_msg,
-                json_response=json_response,
+                json_responses=(json_response,),
             )
 
     async def _handle_json_responses(self, json_responses: typing.Sequence, *, ws_msg: web_ws.WSMessage) -> None:
+        assert self.ws_connect is not None
+
+        if not json_responses:
+            return
+
         if isinstance(json_responses[0], typing.Mapping) and 'method' in json_responses[0]:
-            if self._json_request_handler is not None:
-                await self._json_request_handler(ws_connect=self.ws_connect, ws_msg=ws_msg)
+            if self._json_requests_handler is not None:
+                await self._json_requests_handler(
+                    ws_connect=self.ws_connect,
+                    ws_msg=ws_msg,
+                    json_requests=json_responses,
+                )
         else:
             response_ids = self._get_ids_from_json(json_responses)
 
             if response_ids:
                 self._notify_about_results(response_ids, json_responses)
-            elif self._unprocessed_json_response_handler is not None:
-                self._unprocessed_json_response_handler(
+            elif self._unprocessed_json_responses_handler is not None:
+                await self._unprocessed_json_responses_handler(
                     ws_connect=self.ws_connect,
                     ws_msg=ws_msg,
-                    json_response=json_responses,
+                    json_responses=json_responses,
                 )
 
     def _notify_all_about_error(self, error: Exception) -> None:
@@ -279,14 +311,14 @@ class WsJsonRpcClient(BaseJsonRpcClient):
 
         self._pending.clear()
 
-    def _notify_about_result(self, response_id: typedefs.JsonRpcIdType, json_response: typing.Mapping) -> None:
+    def _notify_about_result(self, response_id: typedefs.JSONRPCIDType, json_response: typing.Mapping) -> None:
         future = self._pending.pop(response_id, None)
 
-        if future is not None:
+        if future is not None and not future.done():
             future.set_result(json_response)
 
     def _notify_about_results(self,
-                              response_ids: typing.Sequence[typedefs.JsonRpcIdType],
+                              response_ids: typing.Sequence[typedefs.JSONRPCIDType],
                               json_response: typing.Sequence) -> None:
         is_processed = False
 

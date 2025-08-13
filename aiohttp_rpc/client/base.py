@@ -1,23 +1,27 @@
 import abc
 import types
 import typing
-from functools import partial
 
-from .. import errors, protocol, typedefs, utils
+from .additional import JSONRPCClientMethods
+from .. import errors, protocol, utils
 
 
 __all__ = (
-    'BaseJsonRpcClient',
+    'BaseJSONRPCClient',
 )
 
 
-class BaseJsonRpcClient(abc.ABC):
-    error_map: typing.Mapping[int, typing.Type[errors.JsonRpcError]] = {
+class BaseJSONRPCClient(abc.ABC):
+    methods: JSONRPCClientMethods
+    error_map: typing.Mapping[int, typing.Type[errors.JSONRPCError]] = {
         error.code: error
         for error in errors.DEFAULT_KNOWN_ERRORS
     }
 
-    async def __aenter__(self) -> 'BaseJsonRpcClient':
+    def __init__(self) -> None:
+        self.methods = JSONRPCClientMethods(self)
+
+    async def __aenter__(self) -> 'BaseJSONRPCClient':
         await self.connect()
         return self
 
@@ -26,9 +30,6 @@ class BaseJsonRpcClient(abc.ABC):
                         exc_value: typing.Optional[BaseException],
                         traceback: typing.Optional[types.TracebackType]) -> None:
         await self.disconnect()
-
-    def __getattr__(self, method_name: str) -> typing.Callable:
-        return partial(self.call, method_name)
 
     @abc.abstractmethod
     async def connect(self) -> None:
@@ -39,10 +40,11 @@ class BaseJsonRpcClient(abc.ABC):
         pass
 
     async def call(self, method_name: str, *args, **kwargs) -> typing.Any:
-        request = protocol.JsonRpcRequest(id=utils.get_random_id(), method_name=method_name, args=args, kwargs=kwargs)
+        request = protocol.JSONRPCRequest(id=utils.get_random_id(), method_name=method_name, args=args, kwargs=kwargs)
         response = await self.direct_call(request)
 
-        assert response is not None  # Because it isn't a notification
+        if response is None:
+            raise errors.EmptyResponse()
 
         if response.error is not None:
             raise response.error
@@ -50,23 +52,18 @@ class BaseJsonRpcClient(abc.ABC):
         return response.result
 
     async def notify(self, method_name: str, *args, **kwargs) -> None:
-        request = protocol.JsonRpcRequest(method_name=method_name, args=args, kwargs=kwargs)
+        request = protocol.JSONRPCRequest(method_name=method_name, args=args, kwargs=kwargs)
         await self.direct_call(request)
 
     async def batch(self,
-                    method_descriptions: typedefs.ClientMethodDescriptionsType, *,
+                    *requests: protocol.JSONRPCRequest,
                     save_order: bool = True) -> typing.Sequence:
-        if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
-            batch_request = method_descriptions
-        else:
-            batch_request = protocol.JsonRpcBatchRequest(requests=tuple(
-                self._parse_method_description(method_description)
-                for method_description in method_descriptions
-            ))
+        batch_request = protocol.JSONRPCBatchRequest(requests=requests)
 
         batch_response = await self.direct_batch(batch_request)
 
-        assert batch_response is not None  # Because it isn't a notification
+        if batch_response is None:
+            raise errors.EmptyResponse()
 
         if save_order:
             return utils.collect_batch_result(batch_request, batch_response)
@@ -76,20 +73,13 @@ class BaseJsonRpcClient(abc.ABC):
                 for response in batch_response.responses
             )
 
-    async def batch_notify(self, method_descriptions: typedefs.ClientMethodDescriptionsType) -> None:
-        if isinstance(method_descriptions, protocol.JsonRpcBatchRequest):
-            batch_request = method_descriptions
-        else:
-            batch_request = protocol.JsonRpcBatchRequest(requests=tuple(
-                self._parse_method_description(method_description, is_notification=True)
-                for method_description in method_descriptions
-            ))
-
+    async def batch_notify(self, *requests: protocol.JSONRPCRequest) -> None:
+        batch_request = protocol.JSONRPCBatchRequest(requests=requests)
         await self.direct_batch(batch_request)
 
     async def direct_call(self,
-                          request: protocol.JsonRpcRequest,
-                          **kwargs) -> typing.Optional[protocol.JsonRpcResponse]:
+                          request: protocol.JSONRPCRequest,
+                          **kwargs) -> typing.Optional[protocol.JSONRPCResponse]:
         json_response, context = await self.send_json(
             request.dump(),
             without_response=request.is_notification,
@@ -99,7 +89,7 @@ class BaseJsonRpcClient(abc.ABC):
         if request.is_notification:
             return None
 
-        response = protocol.JsonRpcResponse.load(
+        response = protocol.JSONRPCResponse.load(
             json_response,
             error_map=self.error_map,
             context=context,
@@ -108,8 +98,8 @@ class BaseJsonRpcClient(abc.ABC):
         return response
 
     async def direct_batch(self,
-                           batch_request: protocol.JsonRpcBatchRequest,
-                           **kwargs) -> typing.Optional[protocol.JsonRpcBatchResponse]:
+                           batch_request: protocol.JSONRPCBatchRequest,
+                           **kwargs) -> typing.Optional[protocol.JSONRPCBatchResponse]:
         if not batch_request.requests:
             raise errors.InvalidRequest('You can\'t send an empty batch request.')
 
@@ -127,7 +117,7 @@ class BaseJsonRpcClient(abc.ABC):
         if not json_response:
             raise errors.ParseError('Server returned an empty batch response.')
 
-        return protocol.JsonRpcBatchResponse.load(json_response)
+        return protocol.JSONRPCBatchResponse.load(json_response, error_map=self.error_map)
 
     @abc.abstractmethod
     async def send_json(self,
@@ -143,40 +133,3 @@ class BaseJsonRpcClient(abc.ABC):
     @staticmethod
     def json_deserialize(data: str) -> typing.Any:
         return utils.json_deserialize(data)
-
-    @staticmethod
-    def _parse_method_description(method_description: typedefs.ClientMethodDescriptionType, *,
-                                  is_notification: bool = False) -> protocol.JsonRpcRequest:
-        if isinstance(method_description, protocol.JsonRpcRequest):
-            return method_description
-
-        request_id = None if is_notification else utils.get_random_id()
-
-        if isinstance(method_description, str):
-            return protocol.JsonRpcRequest(
-                id=request_id,
-                method_name=method_description,
-            )
-
-        if len(method_description) == 1:
-            return protocol.JsonRpcRequest(
-                id=request_id,
-                method_name=method_description[0],
-            )
-
-        if len(method_description) == 2:
-            return protocol.JsonRpcRequest(
-                id=request_id,
-                method_name=method_description[0],
-                params=method_description[1],
-            )
-
-        if len(method_description) == 3:
-            return protocol.JsonRpcRequest(
-                id=request_id,
-                method_name=method_description[0],
-                args=method_description[1],
-                kwargs=method_description[2],  # type: ignore
-            )
-
-        raise errors.InvalidParams('Use string or list (length less than or equal to 3).')

@@ -6,21 +6,37 @@ from aiohttp import client_ws, web_ws
 if typing.TYPE_CHECKING:
     from . import protocol  # NOQA
 
-JsonRpcIdType = typing.Union[int, str]
+JSONRPCIDType = typing.Union[int, str]
 JSONEncoderType = typing.Callable[[typing.Any], str]
-UnboundJSONEncoderType = typing.Callable[[typing.Any], str]
-SingleRequestProcessorType = typing.Callable[['protocol.JsonRpcRequest'], typing.Awaitable['protocol.JsonRpcResponse']]
+UnboundJSONEncoderType = JSONEncoderType
+SingleRequestProcessorType = typing.Callable[['protocol.JSONRPCRequest'], typing.Awaitable['protocol.JSONRPCResponse']]
 UnboundSingleRequestProcessorType = typing.Callable[
-    [typing.Any, 'protocol.JsonRpcRequest'],
-    typing.Awaitable['protocol.JsonRpcResponse'],
+    [typing.Any, 'protocol.JSONRPCRequest'],
+    typing.Awaitable['protocol.JSONRPCResponse'],
 ]
-
-ClientMethodDescriptionType = typing.Union[str, typing.Sequence, 'protocol.JsonRpcRequest']
-ClientMethodDescriptionsType = typing.Union[
-    typing.Iterable[ClientMethodDescriptionType],
-    'protocol.JsonRpcBatchRequest',
-]
-
-ServerMethodDescriptionType = typing.Union['protocol.BaseJsonRpcMethod', typing.Callable]
-
+ServerMethodDescriptionType = typing.Union['protocol.BaseJSONRPCMethod', typing.Callable]
 WSConnectType = typing.Union[client_ws.ClientWebSocketResponse, web_ws.WebSocketResponse]
+
+
+class WSJSONRequestsHandler(typing.Protocol):
+    async def __call__(self, *,
+                       ws_connect: WSConnectType,
+                       ws_msg: web_ws.WSMessage,
+                       json_requests: typing.Sequence[typing.Mapping]) -> None:
+        pass
+
+
+class UnprocessedWSJSONResponsesHandler(typing.Protocol):
+    async def __call__(self, *,
+                       ws_connect: WSConnectType,
+                       ws_msg: web_ws.WSMessage,
+                       json_responses: typing.Sequence[typing.Mapping]) -> None:
+        pass
+
+
+class WSJSONResponseHandler(typing.Protocol):
+    async def __call__(self, *,
+                       ws_connect: WSConnectType,
+                       ws_msg: web_ws.WSMessage,
+                       json_response: typing.Mapping) -> None:
+        pass

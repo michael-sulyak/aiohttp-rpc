@@ -5,16 +5,16 @@ from .. import constants, errors, typedefs, utils
 
 
 __all__ = (
-    'JsonRpcRequest',
-    'JsonRpcBatchRequest',
+    'JSONRPCRequest',
+    'JSONRPCBatchRequest',
 )
 
 
 @dataclass
-class JsonRpcRequest:
+class JSONRPCRequest:
     method_name: str
-    # If `id` is `None` then `JsonRpcRequest` is a notification.
-    id: typing.Optional[typedefs.JsonRpcIdType] = None
+    # If `id` is `None` then `JSONRPCRequest` is a notification.
+    id: typing.Optional[typedefs.JSONRPCIDType] = None
     jsonrpc: str = constants.VERSION_2_0
     extra_args: typing.MutableMapping = field(default_factory=dict)
     context: typing.MutableMapping = field(default_factory=dict)
@@ -48,7 +48,7 @@ class JsonRpcRequest:
         return self.id is None
 
     @classmethod
-    def load(cls, data: typing.Any, **kwargs) -> 'JsonRpcRequest':
+    def load(cls, data: typing.Any, **kwargs) -> 'JSONRPCRequest':
         cls._validate_json_request(data)
 
         return cls(
@@ -76,29 +76,36 @@ class JsonRpcRequest:
     @staticmethod
     def _validate_json_request(data: typing.Any) -> None:
         if not isinstance(data, typing.Mapping):
-            raise errors.InvalidRequest('The request must be of the dict type.')
+            raise errors.InvalidRequest(data={'details': 'The request must be of the dict type.'})
 
         if not ({'method', 'jsonrpc'}) <= data.keys():
-            raise errors.InvalidRequest('The request must contain "method" and "jsonrpc".')
+            raise errors.InvalidRequest(data={'details': 'The request must contain "method" and "jsonrpc".'})
 
         utils.validate_jsonrpc(data['jsonrpc'])
 
+        if 'id' in data:
+            if data['id'] is None:
+                raise errors.InvalidRequest(data={'details': 'The "id" must not be null; omit it for notifications.'})
+
+            if not isinstance(data['id'], (int, str,)):
+                raise errors.InvalidRequest(data={'details': 'The "id" must be string or integer.'})
+
 
 @dataclass
-class JsonRpcBatchRequest:
-    requests: typing.Tuple[JsonRpcRequest, ...] = field(default_factory=tuple)
+class JSONRPCBatchRequest:
+    requests: typing.Tuple[JSONRPCRequest, ...] = field(default_factory=tuple)
 
     @property
     def is_notification(self) -> bool:
         return all(request.is_notification for request in self.requests)
 
     @classmethod
-    def load(cls, data: typing.Any, **kwargs) -> 'JsonRpcBatchRequest':
+    def load(cls, data: typing.Any, **kwargs) -> 'JSONRPCBatchRequest':
         if not isinstance(data, typing.Sequence):
             raise errors.InvalidRequest('A batch request must be of the list type.')
 
         return cls(requests=tuple(
-            JsonRpcRequest.load(item, **kwargs)
+            JSONRPCRequest.load(item, **kwargs)
             for item in data
         ))
 

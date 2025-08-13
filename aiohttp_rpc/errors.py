@@ -4,18 +4,20 @@ import typing
 
 
 __all__ = (
-    'JsonRpcError',
+    'JSONRPCError',
     'ServerError',
     'ParseError',
     'InvalidRequest',
     'MethodNotFound',
     'InvalidParams',
     'InternalError',
+    'EmptyResponse',
+    'RequestTimeoutError',
     'DEFAULT_KNOWN_ERRORS',
 )
 
 
-class JsonRpcError(RuntimeError):
+class JSONRPCError(RuntimeError):
     code: int
     message: str
     data: typing.Optional[typing.Any] = None
@@ -24,9 +26,8 @@ class JsonRpcError(RuntimeError):
                  message: typing.Optional[str] = None, *,
                  data: typing.Optional[typing.Any] = None,
                  code: typing.Optional[int] = None) -> None:
-        super().__init__(self)
-
         self.message = message or self.message
+        super().__init__(self.message)
         self.data = data
         self.code = code or self.code
 
@@ -35,20 +36,20 @@ class JsonRpcError(RuntimeError):
 
     def __repr__(self) -> str:
         msg = self.message.replace('\'', '\\\'')
-        return f'JsonRpcError({self.code}, \'{msg}\')'
+        return f'{self.__class__.__name__}({self.code}, \'{msg}\')'
 
     def __str__(self) -> str:
-        return self.__repr__()
+        return self.message
 
     def __eq__(self, other: typing.Any) -> bool:
         return (
-                isinstance(other, JsonRpcError)
-                and self.code == other.code
-                and self.message == other.message
-                and self.data == other.data
+            isinstance(other, JSONRPCError)
+            and self.code == other.code
+            and self.message == other.message
+            and self.data == other.data
         )
 
-    def with_traceback(self, exc_info=None, traceback_exception=None) -> 'JsonRpcError':
+    def attach_traceback(self, traceback_exception=None) -> None:
         if not traceback_exception:
             traceback_exception = traceback.TracebackException(*sys.exc_info())
 
@@ -56,39 +57,51 @@ class JsonRpcError(RuntimeError):
             self.data = {}
 
         if isinstance(self.data, typing.MutableMapping):
-            self.data['traceback_exception'] = ''.join(traceback_exception.format()).split("\n")
-
-        return self
+            self.data['traceback_exception'] = ''.join(traceback_exception.format()).split('\n')
 
 
-class ServerError(JsonRpcError):
+class ServerError(JSONRPCError):
     code = -32000
     message = 'Server error.'
 
 
-class ParseError(JsonRpcError):
+class ParseError(JSONRPCError):
     code = -32700
-    message = 'Invalid JSON was received by the server.'
+    message = 'Parse error'
 
 
-class InvalidRequest(JsonRpcError):
+class InvalidRequest(JSONRPCError):
     code = -32600
-    message = 'The JSON sent is not a valid Request object.'
+    message = 'Invalid Request'
 
 
-class MethodNotFound(JsonRpcError):
+class MethodNotFound(JSONRPCError):
     code = -32601
-    message = 'The method does not exist / is not available.'
+    message = 'Method not found'
 
 
-class InvalidParams(JsonRpcError):
+class InvalidParams(JSONRPCError):
     code = -32602
-    message = 'Invalid method parameter(s).'
+    message = 'Invalid params'
 
 
-class InternalError(JsonRpcError):
+class InternalError(JSONRPCError):
     code = -32603
-    message = 'Internal JSON-RPC error.'
+    message = 'Internal error'
+
+
+class EmptyResponse(JSONRPCError):
+    """It's error occurs on the client side when there are no responses."""
+
+    code = -32050
+    message = 'Empty Response'
+
+
+class RequestTimeoutError(JSONRPCError):
+    """It's error occurs on the client side when we didn't receive a response on time."""
+
+    code = -32051
+    message = 'Timeout error'
 
 
 DEFAULT_KNOWN_ERRORS = frozenset({
@@ -98,4 +111,7 @@ DEFAULT_KNOWN_ERRORS = frozenset({
     MethodNotFound,
     InvalidParams,
     InternalError,
+    # Local errors:
+    # EmptyResponse,
+    # RequestTimeoutError,
 })

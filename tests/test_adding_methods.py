@@ -17,12 +17,12 @@ async def test_adding_method():
         def method_3():
             pass
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
 
     rpc_server.add_method(method)
     assert rpc_server.methods['method'].func == method
 
-    rpc_server.add_method(aiohttp_rpc.JsonRpcMethod(method, name='test'))
+    rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(method, name='test'))
     assert rpc_server.methods['test'].func == method
 
     test_class = TestClass()
@@ -43,7 +43,7 @@ async def test_adding_methods():
     def method_2():
         pass
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
 
     rpc_server.add_methods([method_1, method_2])
     assert rpc_server.methods['method_1'].func == method_1

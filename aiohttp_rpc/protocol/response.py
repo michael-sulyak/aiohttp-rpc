@@ -5,19 +5,19 @@ from .. import constants, errors, typedefs, utils
 
 
 __all__ = (
-    'JsonRpcResponse',
-    'JsonRpcBatchResponse',
-    'JsonRpcUnlinkedResults',
-    'JsonRpcDuplicatedResults',
+    'JSONRPCResponse',
+    'JSONRPCBatchResponse',
+    'JSONRPCUnlinkedResults',
+    'JSONRPCDuplicatedResults',
 )
 
 
 @dataclass
-class JsonRpcResponse:
-    id: typing.Optional[typedefs.JsonRpcIdType] = None
+class JSONRPCResponse:
+    id: typing.Optional[typedefs.JSONRPCIDType] = None
     jsonrpc: str = constants.VERSION_2_0
     result: typing.Any = None
-    error: typing.Optional[errors.JsonRpcError] = None
+    error: typing.Optional[errors.JSONRPCError] = None
     context: typing.MutableMapping = field(default_factory=dict)
 
     @property
@@ -27,7 +27,7 @@ class JsonRpcResponse:
     @classmethod
     def load(cls,
              data: typing.Any, *,
-             error_map: typing.Optional[typing.Mapping] = None, **kwargs) -> 'JsonRpcResponse':
+             error_map: typing.Optional[typing.Mapping] = None, **kwargs) -> 'JSONRPCResponse':
         cls._validate_json_response(data)
 
         response = cls(
@@ -61,7 +61,7 @@ class JsonRpcResponse:
     @staticmethod
     def _validate_json_response(data: typing.Any) -> None:
         if not isinstance(data, typing.Mapping):
-            raise errors.InvalidRequest
+            raise errors.InvalidRequest('Data must be a mapping.')
 
         utils.validate_jsonrpc(data.get('jsonrpc'))
 
@@ -69,19 +69,25 @@ class JsonRpcResponse:
             raise errors.InvalidRequest('"result" or "error" not found in data.', data={'raw_response': data})
 
     @staticmethod
-    def _add_error(response: 'JsonRpcResponse',
+    def _add_error(response: 'JSONRPCResponse',
                    error: typing.Any, *,
                    error_map: typing.Optional[typing.Mapping] = None) -> None:
         if not isinstance(error, typing.Mapping):
-            raise errors.InvalidRequest
+            raise errors.InvalidRequest(
+                'The "error" field must be a mapping.',
+                data={'raw_error': error},
+            )
 
         if not {'code', 'message'} <= error.keys():
-            raise errors.InvalidRequest
+            raise errors.InvalidRequest(
+                'The "error" field must contain "code" and "message".',
+                data={'raw_error': error},
+            )
 
         if error_map:
-            exception_class = error_map.get(error['code'], errors.JsonRpcError)
+            exception_class = error_map.get(error['code'], errors.JSONRPCError)
         else:
-            exception_class = errors.JsonRpcError
+            exception_class = errors.JSONRPCError
 
         response.error = exception_class(
             message=error['message'],
@@ -91,19 +97,19 @@ class JsonRpcResponse:
 
 
 @dataclass
-class JsonRpcBatchResponse:
-    responses: typing.Tuple[JsonRpcResponse, ...] = field(default_factory=tuple)
+class JSONRPCBatchResponse:
+    responses: typing.Tuple[JSONRPCResponse, ...] = field(default_factory=tuple)
 
     @classmethod
     def load(cls,
              data: typing.Any, *,
              error_map: typing.Optional[typing.Mapping] = None,
-             **kwargs) -> 'JsonRpcBatchResponse':
+             **kwargs) -> 'JSONRPCBatchResponse':
         if not isinstance(data, typing.Sequence):
             raise errors.InvalidRequest('A batch request must be of the list type.')
 
         return cls(responses=tuple(
-            JsonRpcResponse.load(item, error_map=error_map, **kwargs)
+            JSONRPCResponse.load(item, error_map=error_map, **kwargs)
             for item in data
         ))
 
@@ -112,7 +118,7 @@ class JsonRpcBatchResponse:
 
 
 @dataclass
-class JsonRpcUnlinkedResults:
+class JSONRPCUnlinkedResults:
     results: typing.MutableSequence = field(default_factory=list)
 
     def __bool__(self) -> bool:
@@ -123,7 +129,7 @@ class JsonRpcUnlinkedResults:
 
 
 @dataclass
-class JsonRpcDuplicatedResults:
+class JSONRPCDuplicatedResults:
     results: typing.MutableSequence = field(default_factory=list)
 
     def __bool__(self) -> bool:

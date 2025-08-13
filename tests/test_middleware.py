@@ -12,10 +12,10 @@ async def test_middleware(aiohttp_client):
         response.result += '!'
         return response
 
-    rpc_server = aiohttp_rpc.JsonRpcServer(middlewares=(test_middleware,))
+    rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(test_middleware,))
     rpc_server.add_method(method)
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         assert await rpc.call('my_method') == 'ok!'

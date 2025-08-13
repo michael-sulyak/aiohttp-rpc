@@ -1,12 +1,12 @@
 import logging
 import typing
 
-from . import errors, protocol, client
+from . import client, errors, protocol
 
 
 __all__ = (
     'exception_middleware',
-    'extra_args_middleware',
+    'inject_request_middleware',
     'logging_middleware',
     'ws_client_for_server_response',
     'DEFAULT_MIDDLEWARES',
@@ -15,33 +15,44 @@ __all__ = (
 logger = logging.getLogger(__name__)
 
 
-async def extra_args_middleware(request: protocol.JsonRpcRequest, handler: typing.Callable) -> protocol.JsonRpcResponse:
+async def inject_request_middleware(request: protocol.JSONRPCRequest,
+                                    handler: typing.Callable) -> protocol.JSONRPCResponse:
     request.extra_args['rpc_request'] = request
     return await handler(request)
 
 
-async def exception_middleware(request: protocol.JsonRpcRequest, handler: typing.Callable) -> protocol.JsonRpcResponse:
+async def exception_middleware(request: protocol.JSONRPCRequest, handler: typing.Callable) -> protocol.JSONRPCResponse:
     try:
         response = await handler(request)
-    except errors.JsonRpcError as e:
-        logger.warning('Unprocessed errors.JsonRpcError', exc_info=True)
-        response = protocol.JsonRpcResponse(
+    except errors.JSONRPCError as e:
+        logger.warning(
+            'Unprocessed JSONRPCError for method="%s" id="%s"',
+            request.method_name,
+            request.id,
+            exc_info=True,
+        )
+        response = protocol.JSONRPCResponse(
             id=request.id,
             jsonrpc=request.jsonrpc,
             error=e,
         )
     except Exception as e:
-        logger.exception(e)
-        response = protocol.JsonRpcResponse(
+        logger.exception(
+            'Unhandled exception for method="%s" id="%s": %s',
+            request.method_name,
+            request.id,
+            e,
+        )
+        response = protocol.JSONRPCResponse(
             id=request.id,
             jsonrpc=request.jsonrpc,
-            error=errors.InternalError().with_traceback(),
+            error=errors.InternalError(),
         )
 
     return response
 
 
-async def logging_middleware(request: protocol.JsonRpcRequest, handler: typing.Callable) -> protocol.JsonRpcResponse:
+async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.Callable) -> protocol.JSONRPCResponse:
     raw_request = request.dump()
 
     logger.info(
@@ -54,7 +65,7 @@ async def logging_middleware(request: protocol.JsonRpcRequest, handler: typing.C
 
     response = await handler(request)
 
-    raw_response = request.dump()
+    raw_response = response.dump()
 
     logger.info(
         'RpcResponse id="%s" method="%s" params="%s" result="%s" error="%s"',
@@ -63,21 +74,21 @@ async def logging_middleware(request: protocol.JsonRpcRequest, handler: typing.C
         raw_request.get('params', ''),
         raw_response.get('result', ''),
         raw_response.get('error', ''),
-        extra={'request': raw_response, 'response': raw_response},
+        extra={'request': raw_request, 'response': raw_response},
     )
 
     return response
 
 
-async def ws_client_for_server_response(request: protocol.JsonRpcRequest,
-                                        handler: typing.Callable) -> protocol.JsonRpcResponse:
+async def ws_client_for_server_response(request: protocol.JSONRPCRequest,
+                                        handler: typing.Callable) -> protocol.JSONRPCResponse:
     ws_connect = request.context['ws_connect']
-    request.context['ws_client'] = client.WsJsonRpcClient(ws_connect=ws_connect)
-    request.extra_args['rpc_ws_client'] = request.context['ws_client']
+    request.context['ws_client'] = client.WSJSONRPCClient(ws_connect=ws_connect)
+    request.extra_args['ws_rpc_client'] = request.context['ws_client']
     return await handler(request)
 
 
 DEFAULT_MIDDLEWARES = (
     exception_middleware,
-    extra_args_middleware,
+    inject_request_middleware,
 )

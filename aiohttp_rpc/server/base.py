@@ -7,41 +7,42 @@ from .. import errors, protocol, typedefs, utils
 
 
 __all__ = (
-    'BaseJsonRpcServer',
+    'BaseJSONRPCServer',
 )
 
 
-class BaseJsonRpcServer(abc.ABC):
-    methods: typing.MutableMapping[str, protocol.BaseJsonRpcMethod]
+class BaseJSONRPCServer(abc.ABC):
+    methods: typing.MutableMapping[str, protocol.BaseJSONRPCMethod]
     middlewares: typing.Sequence[typing.Callable]
     json_serialize: typedefs.UnboundJSONEncoderType
-    _middleware_chain: typing.ClassVar[typedefs.UnboundSingleRequestProcessorType]
+    _middleware_chain: typedefs.UnboundSingleRequestProcessorType
+    _max_batch: typing.Optional[int]
+    _max_payload_bytes: typing.Optional[int]
 
     def __init__(self, *,
                  json_serialize: typedefs.JSONEncoderType = utils.json_serialize,
                  middlewares: typing.Sequence = (),
-                 methods: typing.Optional[typing.MutableMapping[str, protocol.BaseJsonRpcMethod]] = None) -> None:
-        if methods is None:
-            methods = {
-                'get_method': protocol.JsonRpcMethod(self.get_method),
-                'get_methods': protocol.JsonRpcMethod(self.get_methods),
-            }
-
-        self.methods = methods
+                 methods: typing.Optional[typing.MutableMapping[str, protocol.BaseJSONRPCMethod]] = None,
+                 max_batch: typing.Optional[int] = None,
+                 max_payload_bytes: typing.Optional[int] = 1_048_576) -> None:
+        self.methods = methods or {}
 
         self.middlewares = middlewares
         self._load_middlewares()
 
         self.json_serialize = json_serialize  # type: ignore
 
+        self._max_batch = max_batch
+        self._max_payload_bytes = max_payload_bytes
+
     def add_method(self,
                    method: typing.Union[typedefs.ServerMethodDescriptionType], *,
-                   replace: bool = False) -> protocol.BaseJsonRpcMethod:
-        if not isinstance(method, protocol.BaseJsonRpcMethod):
-            method = protocol.JsonRpcMethod(method)
+                   replace: bool = False) -> protocol.BaseJSONRPCMethod:
+        if not isinstance(method, protocol.BaseJSONRPCMethod):
+            method = protocol.JSONRPCMethod(method)
 
         if not replace and method.name in self.methods:
-            raise errors.InvalidParams(f'Method {method.name} has already been added.')
+            raise errors.InvalidParams(data={'details': f'Method {method.name} has already been added.'})
 
         self.methods[method.name] = method
 
@@ -49,7 +50,7 @@ class BaseJsonRpcServer(abc.ABC):
 
     def add_methods(self,
                     methods: typing.Sequence[typedefs.ServerMethodDescriptionType], *,
-                    replace: bool = False) -> typing.Tuple[protocol.BaseJsonRpcMethod, ...]:
+                    replace: bool = False) -> typing.Tuple[protocol.BaseJSONRPCMethod, ...]:
         return tuple(
             self.add_method(method, replace=replace)
             for method in methods
@@ -93,6 +94,9 @@ class BaseJsonRpcServer(abc.ABC):
             'kwargs': method.supported_kwargs,
         }
 
+    def add_introspection(self) -> None:
+        self.add_methods((self.get_method, self.get_methods,))
+
     def _load_middlewares(self) -> None:
         self._middleware_chain = self._process_single_request  # type: ignore
 
@@ -103,18 +107,23 @@ class BaseJsonRpcServer(abc.ABC):
             )
 
     async def _process_input_data(
-            self,
-            data: typing.Any, *,
-            context: typing.MutableMapping[str, typing.Any],
+        self,
+        data: typing.Any, *,
+        context: typing.MutableMapping[str, typing.Any],
     ) -> typing.Optional[typing.Union[typing.Mapping, typing.Tuple[typing.Mapping, ...]]]:
-        if isinstance(data, typing.Sequence):
+        if isinstance(data, typing.Sequence) and not isinstance(data, (str, bytes,)):
             if not data:
-                return protocol.JsonRpcResponse(error=errors.InvalidRequest()).dump()
+                return protocol.JSONRPCResponse(error=errors.InvalidRequest()).dump()
+
+            if self._max_batch is not None and len(data) > self._max_batch:
+                return protocol.JSONRPCResponse(
+                    error=errors.InvalidRequest(data={'details': 'Batch too large.'}),
+                ).dump()
 
             json_responses = await asyncio.gather(
                 *(
-                    self._process_single_json_request(raw_rcp_request, context=context)
-                    for raw_rcp_request in data
+                    self._process_single_json_request(raw_rpc_request, context=context)
+                    for raw_rpc_request in data
                 ),
                 return_exceptions=True,
             )
@@ -125,12 +134,15 @@ class BaseJsonRpcServer(abc.ABC):
                 if json_response is not None  # Skip notifications.
             )
 
-            return result if result else None
+            return result or None
 
         if isinstance(data, typing.Mapping):
             return await self._process_single_json_request(data, context=context)
 
-        response = protocol.JsonRpcResponse(error=errors.InvalidRequest('Data must be a dict or an list.'))
+        response = protocol.JSONRPCResponse(
+            error=errors.InvalidRequest(data={'details': 'Data must be a dict or a list.'}),
+        )
+
         return response.dump()
 
     @staticmethod
@@ -147,21 +159,23 @@ class BaseJsonRpcServer(abc.ABC):
                                            context: typing.MutableMapping[str, typing.Any],
                                            ) -> typing.Optional[typing.Mapping]:
         if not isinstance(json_request, typing.Mapping):
-            return protocol.JsonRpcResponse(error=errors.InvalidRequest('Data must be a dict.')).dump()
+            return protocol.JSONRPCResponse(
+                error=errors.InvalidRequest(data={'details': 'Data must be a dict.'}),
+            ).dump()
 
         try:
-            request = protocol.JsonRpcRequest.load(json_request, context=context)
-        except errors.JsonRpcError as e:
-            return protocol.JsonRpcResponse(id=json_request.get('id'), error=e).dump()
+            request = protocol.JSONRPCRequest.load(json_request, context=context)
+        except errors.JSONRPCError as e:
+            return protocol.JSONRPCResponse(id=json_request.get('id'), error=e).dump()
 
-        response = await self._middleware_chain(request)
+        response = await self._middleware_chain(request)  # type: ignore
 
         if response.is_notification:
             return None
 
         return response.dump()
 
-    async def _process_single_request(self, request: protocol.JsonRpcRequest) -> protocol.JsonRpcResponse:
+    async def _process_single_request(self, request: protocol.JSONRPCRequest) -> protocol.JSONRPCResponse:
         result, error = None, None
 
         try:
@@ -171,10 +185,10 @@ class BaseJsonRpcServer(abc.ABC):
                 kwargs=request.kwargs,
                 extra_args=request.extra_args,
             )
-        except errors.JsonRpcError as e:
+        except errors.JSONRPCError as e:
             error = e
 
-        response = protocol.JsonRpcResponse(
+        response = protocol.JSONRPCResponse(
             id=request.id,
             jsonrpc=request.jsonrpc,
             result=result,

@@ -6,9 +6,9 @@ from traceback import format_exception_only
 
 from . import constants, errors
 
+
 if typing.TYPE_CHECKING:
     from . import protocol  # NOQA
-
 
 __all__ = (
     'convert_params_to_args_and_kwargs',
@@ -24,7 +24,7 @@ def convert_params_to_args_and_kwargs(params: typing.Any) -> typing.Tuple[typing
         return (), {}
 
     if isinstance(params, constants.JSON_PRIMITIVE_TYPES):
-        return (params,), {}
+        raise errors.InvalidRequest(f'Params must be an array or object per JSON-RPC 2.0. {params}')
 
     if isinstance(params, typing.Sequence):
         return params, {}
@@ -44,13 +44,10 @@ def parse_args_and_kwargs(args: typing.Optional[typing.Sequence],
     if not has_args and not has_kwargs:
         return constants.NOTHING, (), {}  # type: ignore
 
-    if not (has_args ^ has_kwargs):
-        raise errors.InvalidParams('Need use args or kwargs.')
+    if has_args and has_kwargs:
+        raise errors.InvalidParams(data={'details': 'Need use args or kwargs.'})
 
     if has_args:
-        if len(args) == 1 and isinstance(args[0], constants.JSON_PRIMITIVE_TYPES):  # type: ignore
-            return args[0], args, {}  # type: ignore
-
         return args, args, {}  # type: ignore
 
     return kwargs, (), kwargs  # type: ignore
@@ -65,15 +62,18 @@ def get_exc_message(exp: BaseException) -> str:
 
 
 def validate_jsonrpc(jsonrpc: typing.Any) -> None:
+    if jsonrpc is None:
+        raise errors.InvalidRequest(f'The "jsonrpc" field is required and must be "{constants.VERSION_2_0}".')
+
     if jsonrpc != constants.VERSION_2_0:
         raise errors.InvalidRequest(f'Only version "{constants.VERSION_2_0}" is supported.')
 
 
-def collect_batch_result(batch_request: 'protocol.JsonRpcBatchRequest',
-                         batch_response: 'protocol.JsonRpcBatchResponse') -> typing.Tuple[typing.Any, ...]:
+def collect_batch_result(batch_request: 'protocol.JSONRPCBatchRequest',
+                         batch_response: 'protocol.JSONRPCBatchResponse') -> typing.Tuple[typing.Any, ...]:
     from . import protocol
 
-    unlinked_results = protocol.JsonRpcUnlinkedResults()
+    unlinked_results = protocol.JSONRPCUnlinkedResults()
     responses_map: typing.Dict[typing.Any, typing.Any] = {}
 
     for response in batch_response.responses:
@@ -87,10 +87,10 @@ def collect_batch_result(batch_request: 'protocol.JsonRpcBatchRequest',
             continue
 
         if response.id in responses_map:
-            if isinstance(responses_map[response.id], protocol.JsonRpcDuplicatedResults):
+            if isinstance(responses_map[response.id], protocol.JSONRPCDuplicatedResults):
                 responses_map[response.id].add(value)
             else:
-                responses_map[response.id] = protocol.JsonRpcDuplicatedResults([
+                responses_map[response.id] = protocol.JSONRPCDuplicatedResults([
                     responses_map[response.id],
                     value,
                 ])
@@ -105,5 +105,5 @@ def collect_batch_result(batch_request: 'protocol.JsonRpcBatchRequest',
     )
 
 
-json_serialize = partial(json.dumps, default=lambda x: repr(x))
+json_serialize = partial(json.dumps, default=lambda x: f'<non-serializable {type(x).__name__}>')
 json_deserialize = json.loads

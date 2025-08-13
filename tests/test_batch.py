@@ -1,3 +1,5 @@
+import pytest
+
 import aiohttp_rpc
 from tests import utils
 
@@ -9,7 +11,7 @@ async def test_batch(aiohttp_client):
     def method_2():
         return [1]
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
     rpc_server.add_methods((
         method_1,
         method_2,
@@ -20,9 +22,15 @@ async def test_batch(aiohttp_client):
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
-        assert await rpc.batch(('method_1', 'method_2',)) == ([1, 2, 1], [1],)
-        assert await rpc.batch((('method_1', 4), ('method_1', [], {'a': 5}),)) == ([1, 2, 4], [1, 2, 5],)
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        assert await rpc.batch(
+            rpc.methods.method_1.request(),
+            rpc.methods.method_2.request(),
+        ) == ([1, 2, 1], [1],)
+        assert await rpc.batch(
+            rpc.methods.method_1.request(4),
+            rpc.methods.method_1.request(a=5),
+        ) == ([1, 2, 4], [1, 2, 5],)
 
 
 async def test_unlinked_results(aiohttp_client, mocker):
@@ -32,7 +40,7 @@ async def test_unlinked_results(aiohttp_client, mocker):
     def method_2():
         return [1]
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
     rpc_server.add_methods((
         method_1,
         method_2,
@@ -55,18 +63,25 @@ async def test_unlinked_results(aiohttp_client, mocker):
         ]
         return data, {}
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         mocker.patch.object(rpc, 'send_json', new_callable=lambda: test_send_json_1)
-        unlinked_results = aiohttp_rpc.JsonRpcUnlinkedResults(results=[[1]])
-        assert await rpc.batch(('method_1', 'method_2',)) == ([1, 2, 1], unlinked_results,)
+        unlinked_results = aiohttp_rpc.JSONRPCUnlinkedResults(results=[[1]])
+        assert await rpc.batch(
+            rpc.methods.method_1.request(),
+            rpc.methods.method_2.request(),
+        ) == ([1, 2, 1], unlinked_results,)
 
         mocker.patch.object(rpc, 'send_json', new_callable=lambda: test_send_json_2)
-        unlinked_results = aiohttp_rpc.JsonRpcUnlinkedResults(results=[[1], [1]])
-        assert await rpc.batch(('method_1', 'method_2', 'method_2',)) == (
-            [1, 2, 1],
-            unlinked_results,
-            unlinked_results,
-        )
+        unlinked_results = aiohttp_rpc.JSONRPCUnlinkedResults(results=[[1], [1]])
+        assert await rpc.batch(
+            rpc.methods.method_1.request(),
+            rpc.methods.method_2.request(),
+            rpc.methods.method_3.request(),
+        ) == (
+                   [1, 2, 1],
+                   unlinked_results,
+                   unlinked_results,
+               )
 
 
 async def test_duplicated_results(aiohttp_client, mocker):
@@ -76,7 +91,7 @@ async def test_duplicated_results(aiohttp_client, mocker):
     def method_2():
         return [1]
 
-    rpc_server = aiohttp_rpc.JsonRpcServer()
+    rpc_server = aiohttp_rpc.JSONRPCServer()
     rpc_server.add_methods((
         method_1,
         method_2,
@@ -100,16 +115,56 @@ async def test_duplicated_results(aiohttp_client, mocker):
         ]
         return data, {}
 
-    async with aiohttp_rpc.JsonRpcClient('/rpc', session=client) as rpc:
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         mocker.patch.object(rpc, 'send_json', new_callable=lambda: test_send_json_1)
-        unlinked_results = aiohttp_rpc.JsonRpcUnlinkedResults(results=[[1]])
-        assert await rpc.batch(('method_1', 'method_2',)) == ([1, 2, 1], unlinked_results,)
+        unlinked_results = aiohttp_rpc.JSONRPCUnlinkedResults(results=[[1]])
+        assert await rpc.batch(
+            rpc.methods.method_1.request(),
+            rpc.methods.method_2.request(),
+        ) == ([1, 2, 1], unlinked_results,)
 
         mocker.patch.object(rpc, 'send_json', new_callable=lambda: test_send_json_2)
-        unlinked_results = aiohttp_rpc.JsonRpcUnlinkedResults(results=[[1], [1]])
-        duplicated_results = aiohttp_rpc.JsonRpcDuplicatedResults(results=[[1, 2, 1], [1, 2, 3]])
-        assert await rpc.batch(('method_1', 'method_2', 'method_2',)) == (
-            duplicated_results,
-            unlinked_results,
-            unlinked_results,
-        )
+        unlinked_results = aiohttp_rpc.JSONRPCUnlinkedResults(results=[[1], [1]])
+        duplicated_results = aiohttp_rpc.JSONRPCDuplicatedResults(results=[[1, 2, 1], [1, 2, 3]])
+        assert await rpc.batch(
+            rpc.methods.method_1.request(),
+            rpc.methods.method_2.request(),
+            rpc.methods.method_3.request(),
+        ) == (
+                   duplicated_results,
+                   unlinked_results,
+                   unlinked_results,
+               )
+
+
+async def test_http_max_batch(aiohttp_client):
+    server = aiohttp_rpc.JSONRPCServer(max_batch=2)
+
+    def ok(): return True
+
+    server.add_method(ok)
+    client = await utils.make_client(aiohttp_client, server)
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        result, _ = await rpc.send_json([
+            {'jsonrpc': '2.0', 'method': 'ok', 'id': 1},
+            {'jsonrpc': '2.0', 'method': 'ok', 'id': 2},
+            {'jsonrpc': '2.0', 'method': 'ok', 'id': 3},
+        ])
+        assert result == {
+            'jsonrpc': '2.0',
+            'error': {
+                'code': -32600,
+                'message': 'Invalid Request',
+                'data': {'details': 'Batch too large.'},
+            },
+            'id': None,
+        }
+
+
+async def test_http_max_payload(aiohttp_client):
+    server = aiohttp_rpc.JSONRPCServer(max_payload_bytes=10)
+    client = await utils.make_client(aiohttp_client, server)
+
+    async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
+        with pytest.raises(aiohttp_rpc.errors.ParseError):
+            await rpc.send_json({'jsonrpc': '2.0', 'method': 'x', 'id': 1, 'params': 'xxxxxxxxxxxxx'})
