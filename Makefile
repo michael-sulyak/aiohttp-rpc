@@ -32,15 +32,14 @@ test:
 test-all:
 	tox
 
-release: dist
+build: clean
+	python -m build
+
+release: build
+	twine check dist/*
 	twine upload dist/*
 
-build: check clean ## builds source and wheel package
-	python setup.py sdist
-	python setup.py bdist_wheel
-	ls -l dist
-
-install: clean
-	python setup.py install
+install:
+	pip install -e .
 
 check: test lint typing
