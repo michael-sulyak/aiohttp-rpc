@@ -2,7 +2,6 @@ import json
 import typing
 import uuid
 from functools import partial
-from traceback import format_exception_only
 
 from . import constants, errors
 
@@ -13,7 +12,6 @@ if typing.TYPE_CHECKING:
 __all__ = (
     'convert_params_to_args_and_kwargs',
     'parse_args_and_kwargs',
-    'get_exc_message',
     'json_serialize',
     'collect_batch_result',
 )
@@ -55,10 +53,6 @@ def parse_args_and_kwargs(args: typing.Optional[typing.Sequence],
 
 def get_random_id() -> str:
     return str(uuid.uuid4())
-
-
-def get_exc_message(exp: BaseException) -> str:
-    return ''.join(format_exception_only(exp.__class__, exp)).strip()
 
 
 def validate_jsonrpc(jsonrpc: typing.Any) -> None:

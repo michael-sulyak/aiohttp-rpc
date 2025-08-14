@@ -5,7 +5,7 @@ import typing
 from aiohttp import ClientSession, http_websocket, web_ws
 
 from .base import BaseJSONRPCClient
-from .. import errors, typedefs, utils
+from .. import errors, typedefs
 
 
 __all__ = (
@@ -114,7 +114,7 @@ class WSJSONRPCClient(BaseJSONRPCClient):
 
     async def send_json(self,
                         data: typing.Any, *,
-                        without_response: bool = False,
+                        ignore_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
 
         async def _send(text: str, **kw):
@@ -123,12 +123,12 @@ class WSJSONRPCClient(BaseJSONRPCClient):
             try:
                 await self.ws_connect.send_str(text, **kw)
             except (ConnectionResetError, RuntimeError, OSError) as e:
-                logger.warning('WS send failed.', exc_info=True)
-                error = errors.ServerError(data={'details': utils.get_exc_message(e)})
+                logger.warning('WS send failed', exc_info=True)
+                error = errors.TransportError()
                 self._notify_all_about_error(error)
-                raise error
+                raise error from e
 
-        if without_response:
+        if ignore_response:
             await _send(self.json_serialize(data), **kwargs)
             return None, None
 
@@ -193,9 +193,9 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                     continue
 
             if ws_msg.type in (
-                http_websocket.WSMsgType.CLOSE,
-                http_websocket.WSMsgType.CLOSING,
-                http_websocket.WSMsgType.CLOSED,
+                    http_websocket.WSMsgType.CLOSE,
+                    http_websocket.WSMsgType.CLOSING,
+                    http_websocket.WSMsgType.CLOSED,
             ):
                 break
 

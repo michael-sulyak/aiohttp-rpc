@@ -3,7 +3,7 @@ import asyncio
 import inspect
 import typing
 
-from .. import errors, utils
+from .. import errors
 
 
 __all__ = (
@@ -22,7 +22,7 @@ class BaseJSONRPCMethod(abc.ABC):
     async def __call__(self,
                        args: typing.Sequence,
                        kwargs: typing.Mapping,
-                       extra_args: typing.Optional[typing.Mapping] = None) -> typing.Any:
+                       extra_kwargs: typing.Optional[typing.Mapping] = None) -> typing.Any:
         pass
 
     def __repr__(self) -> str:
@@ -40,13 +40,13 @@ class BaseJSONRPCMethod(abc.ABC):
 class JSONRPCMethod(BaseJSONRPCMethod):
     is_coroutine: bool
     is_class: bool
-    _add_extra_args: bool
+    _pass_extra_kwargs: bool
     _prepare_result: typing.Optional[typing.Callable]
 
     def __init__(self,
                  func: typing.Callable, *,
                  name: typing.Optional[str] = None,
-                 add_extra_args: bool = True,
+                 pass_extra_kwargs: bool = False,
                  prepare_result: typing.Optional[typing.Callable] = None) -> None:
         assert callable(func)
 
@@ -54,7 +54,7 @@ class JSONRPCMethod(BaseJSONRPCMethod):
         self.name = name if name is not None else func.__name__
         self.doc = self.func.__doc__
 
-        self._add_extra_args = add_extra_args
+        self._pass_extra_kwargs = pass_extra_kwargs
         self._prepare_result = prepare_result
 
         self._inspect_func()
@@ -62,9 +62,9 @@ class JSONRPCMethod(BaseJSONRPCMethod):
     async def __call__(self,
                        args: typing.Sequence,
                        kwargs: typing.Mapping,
-                       extra_args: typing.Optional[typing.Mapping] = None) -> typing.Any:
-        if self._add_extra_args and extra_args:
-            args, kwargs = self._add_extra_args_in_args_and_kwargs(args, kwargs, extra_args)
+                       extra_kwargs: typing.Optional[typing.Mapping] = None) -> typing.Any:
+        if self._pass_extra_kwargs and extra_kwargs:
+            kwargs = {**kwargs, **extra_kwargs}
 
         self._check_func_signature(args, kwargs)
 
@@ -81,72 +81,7 @@ class JSONRPCMethod(BaseJSONRPCMethod):
 
     def _inspect_func(self) -> None:
         self.is_class = inspect.isclass(self.func)
-        func = self.func.__init__ if self.is_class else self._unwrap_func(self.func)  # type: ignore
-
-        argspec = inspect.getfullargspec(func)
-
-        if self.is_class or inspect.ismethod(func):
-            self.supported_args = tuple(argspec.args[1:])
-        else:
-            self.supported_args = tuple(argspec.args)
-
-        self.supported_kwargs = tuple(argspec.kwonlyargs)
-        self.is_coroutine = asyncio.iscoroutinefunction(func)
-
-    @staticmethod
-    def _unwrap_func(func: typing.Callable) -> typing.Callable:
-        try:
-            return inspect.unwrap(func)
-        except Exception as e:
-            raise errors.InternalError(
-                data={'details': f'Failed to unwrap function: {utils.get_exc_message(e)}'},
-            ) from e
-
-    def _add_extra_args_in_args_and_kwargs(self,
-                                           args: typing.Sequence,
-                                           kwargs: typing.Mapping,
-                                           extra_args: typing.Mapping) -> typing.Tuple[typing.Sequence, typing.Mapping]:
-        if not extra_args:
-            return args, kwargs
-
-        new_args = self._add_extra_args_in_args(args, extra_args)
-
-        if (len(new_args) - len(args)) == len(extra_args):
-            return new_args, kwargs
-
-        new_kwargs = self._add_extra_kwargs_in_args(kwargs, extra_args)
-        return new_args, new_kwargs
-
-    def _add_extra_args_in_args(self, args: typing.Sequence, extra_args: typing.Mapping) -> typing.Sequence:
-        if self.supported_args:
-            new_args = []
-
-            for supported_arg in self.supported_args:
-                if supported_arg not in extra_args:
-                    # We add extra args only in the begin.
-                    break
-
-                new_args.append(extra_args[supported_arg])
-
-            if new_args:
-                new_args.extend(args)
-                args = new_args
-
-        return args
-
-    def _add_extra_kwargs_in_args(self, kwargs: typing.Mapping, extra_args: typing.Mapping) -> typing.Mapping:
-        if extra_args:
-            new_kwargs = {}
-
-            for extra_arg, value in extra_args.items():
-                if extra_arg in self.supported_kwargs:
-                    new_kwargs[extra_arg] = value
-
-            if new_kwargs:
-                new_kwargs.update(kwargs)
-                kwargs = new_kwargs
-
-        return kwargs
+        self.is_coroutine = asyncio.iscoroutinefunction(self.func)
 
     def _check_func_signature(self, args: typing.Sequence, kwargs: typing.Mapping) -> None:
         try:
@@ -155,4 +90,4 @@ class JSONRPCMethod(BaseJSONRPCMethod):
             else:
                 inspect.signature(self.func).bind(*args, **kwargs)
         except TypeError as e:
-            raise errors.InvalidParams(utils.get_exc_message(e)) from e
+            raise errors.InvalidParams() from e

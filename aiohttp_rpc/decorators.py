@@ -11,13 +11,13 @@ __all__ = (
 
 def rpc_method(name: typing.Optional[str] = None, *,
                rpc_server: JSONRPCServer = default_rpc_server,
-               add_extra_args: bool = True,
+               pass_extra_kwargs: bool = True,
                prepare_result: typing.Optional[typing.Callable] = None) -> typing.Callable:
     def _decorator(func: typing.Callable) -> typing.Callable:
         rpc_server.add_method(JSONRPCMethod(
             func=func,
             name=name,
-            add_extra_args=add_extra_args,
+            pass_extra_kwargs=pass_extra_kwargs,
             prepare_result=prepare_result,
         ))
         return func

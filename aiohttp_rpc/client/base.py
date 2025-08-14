@@ -82,7 +82,7 @@ class BaseJSONRPCClient(abc.ABC):
                           **kwargs) -> typing.Optional[protocol.JSONRPCResponse]:
         json_response, context = await self.send_json(
             request.dump(),
-            without_response=request.is_notification,
+            ignore_response=request.is_notification,
             **kwargs,
         )
 
@@ -107,7 +107,7 @@ class BaseJSONRPCClient(abc.ABC):
 
         json_response, context = await self.send_json(
             batch_request.dump(),
-            without_response=is_notification,
+            ignore_response=is_notification,
             **kwargs,
         )
 
@@ -122,7 +122,7 @@ class BaseJSONRPCClient(abc.ABC):
     @abc.abstractmethod
     async def send_json(self,
                         data: typing.Any, *,
-                        without_response: bool = False,
+                        ignore_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         pass
 

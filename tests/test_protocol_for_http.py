@@ -89,11 +89,18 @@ async def test_notification(aiohttp_client):
         assert await rpc.notify('update', subtrahend=23, minuend=42) is None
         assert await rpc.notify('foobar', minuend=42, subtrahend=23) is None
 
-        result = await rpc.send_json({'jsonrpc': '2.0', 'method': 'update', 'params': [1, 2, 3, 4, 5]})
+        with pytest.raises(aiohttp_rpc.errors.EmptyResponse):
+            await rpc.send_json({'jsonrpc': '2.0', 'method': 'update', 'params': [1, 2, 3, 4, 5]})
+
+        with pytest.raises(aiohttp_rpc.errors.EmptyResponse):
+            await rpc.send_json({'jsonrpc': '2.0', 'method': 'foobar'})
+
+        result = await rpc.send_json({'jsonrpc': '2.0', 'method': 'foobar'}, ignore_response=True)
         assert result[0] is None
 
-        result = await rpc.send_json({'jsonrpc': '2.0', 'method': 'foobar'})
-        assert result[0] is None
+        with pytest.raises(aiohttp_rpc.errors.EmptyResponse):
+            # Note: The server must reply with a response, except for in the case of notifications.
+            await rpc.send_json({'jsonrpc': '2.0', 'method': 'some_func'})
 
 
 async def test_rpc_call_of_non_existent_method(aiohttp_client):
@@ -134,7 +141,11 @@ async def test_rpc_call_with_invalid_json(aiohttp_client):
         json_response = await http_response.json()
         del json_response['error']['message']
 
-        assert json_response == {'jsonrpc': '2.0', 'error': {'code': -32700}, 'id': None}
+        assert json_response == {
+            'jsonrpc': '2.0',
+            'error': {'code': -32700, 'data': {'details': 'Invalid JSON'}},
+            'id': None,
+        }
 
 
 async def test_rpc_call_with_an_empty_array(aiohttp_client):

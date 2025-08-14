@@ -1,10 +1,11 @@
+import asyncio
 import json
 import typing
 
 import aiohttp
 
 from .base import BaseJSONRPCClient
-from .. import errors, utils
+from .. import errors
 
 
 __all__ = (
@@ -38,25 +39,54 @@ class JSONRPCClient(BaseJSONRPCClient):
 
     async def send_json(self,
                         data: typing.Any, *,
-                        without_response: bool = False,
+                        ignore_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         assert self.session is not None
 
-        http_response = await self.session.post(self.url, json=data, **kwargs)
+        try:
+            http_response = await self.session.post(self.url, json=data, **kwargs)
+        except (aiohttp.ClientError, asyncio.TimeoutError,) as e:
+            raise errors.TransportError from e
 
-        if without_response:
-            # Note: Drain so the connection can be reused.
+        status = http_response.status
+
+        if ignore_response:
             await http_response.read()
-            return None, None
+            return None, {'http_response': http_response}
 
-        raw_data = await http_response.read()
+        body_bytes = await http_response.read()
 
-        if raw_data:
-            try:
-                json_response = await http_response.json(loads=self.json_deserialize)
-            except (aiohttp.ContentTypeError, json.JSONDecodeError,) as e:
-                raise errors.ParseError(utils.get_exc_message(e)) from e
+        if body_bytes:
+            body_text = body_bytes.strip().decode(
+                http_response.get_encoding(),
+                errors='replace',
+            )
         else:
-            json_response = None
+            body_text = None
 
+        if not body_text:
+            if 200 <= status < 300:
+                # Expected a JSON-RPC response, got nothing:
+                raise errors.EmptyResponse
+
+            # Non-2xx with empty body: transport-level error
+            raise errors.HTTPStatusError(data={'status': status, 'message': http_response.reason})
+
+        # Try to parse JSON regardless of Content-Type:
+        try:
+            json_response = self.json_deserialize(body_text)
+        except (json.JSONDecodeError, TypeError, ValueError,) as e:
+            if 200 <= status < 300:
+                # Body present but invalid JSON: true JSON-RPC parse error
+                raise errors.ParseError(data={'details': 'Invalid JSON'}) from e
+
+            # Non-2xx with non-JSON body: treat as HTTP/transport error
+            raise errors.HTTPStatusError(
+                data={
+                    'status': status,
+                    'message': http_response.reason,
+                },
+            ) from e
+
+        # If we got JSON, hand it to the protocol layer even on non-2xx:
         return json_response, {'http_response': http_response}

@@ -8,7 +8,7 @@ __all__ = (
     'exception_middleware',
     'inject_request_middleware',
     'logging_middleware',
-    'ws_client_for_server_response',
+    'inject_ws_client_middleware',
     'DEFAULT_MIDDLEWARES',
 )
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 async def inject_request_middleware(request: protocol.JSONRPCRequest,
                                     handler: typing.Callable) -> protocol.JSONRPCResponse:
-    request.extra_args['rpc_request'] = request
+    request.extra_kwargs['rpc_request'] = request
     return await handler(request)
 
 
@@ -80,11 +80,11 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
     return response
 
 
-async def ws_client_for_server_response(request: protocol.JSONRPCRequest,
-                                        handler: typing.Callable) -> protocol.JSONRPCResponse:
+async def inject_ws_client_middleware(request: protocol.JSONRPCRequest,
+                                      handler: typing.Callable) -> protocol.JSONRPCResponse:
     ws_connect = request.context['ws_connect']
     request.context['ws_client'] = client.WSJSONRPCClient(ws_connect=ws_connect)
-    request.extra_args['ws_rpc_client'] = request.context['ws_client']
+    request.extra_kwargs['ws_rpc_client'] = request.context['ws_client']
     return await handler(request)
 
 

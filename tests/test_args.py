@@ -3,7 +3,7 @@ import functools
 import pytest
 
 import aiohttp_rpc
-from aiohttp_rpc import errors
+from aiohttp_rpc import JSONRPCMethod, errors
 from tests import utils
 
 
@@ -87,18 +87,18 @@ async def test_varkw(aiohttp_client):
 
 
 async def test_extra_kwargs(aiohttp_client):
-    def method(rpc_request):
+    def method(*, rpc_request):
         return rpc_request.__class__.__name__
 
     def method_2(*, rpc_request):
         return rpc_request.__class__.__name__
 
     rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(aiohttp_rpc.middlewares.inject_request_middleware,))
-    rpc_server.add_method(method)
-    rpc_server.add_method(method_2)
+    rpc_server.add_method(JSONRPCMethod(method, pass_extra_kwargs=True))
+    rpc_server.add_method(JSONRPCMethod(method_2, pass_extra_kwargs=True))
 
-    assert await rpc_server.call('method', extra_args={'rpc_request': 123}) == 'int'
-    assert await rpc_server.call('method_2', extra_args={'rpc_request': '123'}) == 'str'
+    assert await rpc_server.call('method', extra_kwargs={'rpc_request': 123}) == 'int'
+    assert await rpc_server.call('method_2', extra_kwargs={'rpc_request': '123'}) == 'str'
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
@@ -109,14 +109,14 @@ async def test_extra_kwargs(aiohttp_client):
 
 async def test_extra_kwargs_with_class(aiohttp_client):
     class TestClass:
-        def __init__(self, rpc_request):
+        def __init__(self, *, rpc_request):
             self.rpc_request = rpc_request
 
         def __str__(self):
             return self.rpc_request.__class__.__name__
 
     rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(aiohttp_rpc.middlewares.inject_request_middleware,))
-    rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(TestClass, prepare_result=str))
+    rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(TestClass, prepare_result=str, pass_extra_kwargs=True))
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
@@ -133,7 +133,7 @@ async def test_extra_kwargs_with_wrapper(aiohttp_client):
         return wrapper
 
     @test_decorator
-    def method(rpc_request):
+    def method(*, rpc_request):
         return rpc_request.__class__.__name__
 
     @test_decorator
@@ -141,7 +141,7 @@ async def test_extra_kwargs_with_wrapper(aiohttp_client):
         return True
 
     rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=(aiohttp_rpc.middlewares.inject_request_middleware,))
-    rpc_server.add_methods((method, method_2,))
+    rpc_server.add_methods((aiohttp_rpc.JSONRPCMethod(method, pass_extra_kwargs=True), method_2,))
 
     client = await utils.make_client(aiohttp_client, rpc_server)
 
@@ -170,13 +170,13 @@ def test_empty_args():
 
 
 async def test_echo_with_explicit_empty_args(aiohttp_client):
+    from tests import utils
+
     def echo(*args):
         return list(args)
 
     server = aiohttp_rpc.JSONRPCServer()
     server.add_method(echo)
-
-    from tests import utils
 
     client = await utils.make_client(aiohttp_client, server)
 

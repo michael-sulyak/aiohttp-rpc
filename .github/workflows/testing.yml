@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     strategy:
       matrix:
@@ -26,7 +26,7 @@ jobs:
         pip install --upgrade pip
         pip install "setuptools>=43.0.0"
         pip install importlib-resources
-        pip install poetry==2.1.1
+        pip install poetry==2.1.4
         poetry config virtualenvs.create false
         poetry install
         pip install tox-gh-actions

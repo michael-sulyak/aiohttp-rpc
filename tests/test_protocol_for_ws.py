@@ -229,6 +229,7 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client, mocker):
 
     async def _process_input_data(data, *args, **kwargs):
         assert data == [1, 2, 3]
+
         try:
             result = await original_process_input_data(data, *args, **kwargs)
         except Exception as e:
@@ -251,7 +252,9 @@ async def test_rpc_call_with_invalid_batch(aiohttp_client, mocker):
         await asyncio.wait_for(future, timeout=3)
         handle_ws_message.assert_called_once()
 
-        assert future.result() == ({
+        result = tuple(response.dump() for response in future.result())
+
+        assert result == ({
             'jsonrpc': '2.0',
             'error': {
                 'code': -32600,

@@ -16,7 +16,7 @@ class JSONRPCRequest:
     # If `id` is `None` then `JSONRPCRequest` is a notification.
     id: typing.Optional[typedefs.JSONRPCIDType] = None
     jsonrpc: str = constants.VERSION_2_0
-    extra_args: typing.MutableMapping = field(default_factory=dict)
+    extra_kwargs: typing.MutableMapping = field(default_factory=dict)
     context: typing.MutableMapping = field(default_factory=dict)
     params: typing.Any = constants.NOTHING  # Use `NOTHING`, because `None` is a valid value.
     # We don't convert `args`. So `args` can be `list`, `tuple` or other type.

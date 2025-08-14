@@ -60,7 +60,7 @@ class BaseJSONRPCServer(abc.ABC):
                    method_name: str, *,
                    args: typing.Optional[typing.Sequence] = None,
                    kwargs: typing.Optional[typing.Mapping] = None,
-                   extra_args: typing.Optional[typing.Mapping] = None) -> typing.Any:
+                   extra_kwargs: typing.Optional[typing.Mapping] = None) -> typing.Any:
         if args is None:
             args = ()
 
@@ -70,7 +70,7 @@ class BaseJSONRPCServer(abc.ABC):
         if method_name not in self.methods:
             raise errors.MethodNotFound
 
-        return await self.methods[method_name](args=args, kwargs=kwargs, extra_args=extra_args)
+        return await self.methods[method_name](args=args, kwargs=kwargs, extra_kwargs=extra_kwargs)
 
     def get_methods(self) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
         return {
@@ -110,15 +110,15 @@ class BaseJSONRPCServer(abc.ABC):
         self,
         data: typing.Any, *,
         context: typing.MutableMapping[str, typing.Any],
-    ) -> typing.Optional[typing.Union[typing.Mapping, typing.Tuple[typing.Mapping, ...]]]:
+    ) -> typing.Optional[typing.Union[protocol.JSONRPCResponse, typing.Tuple[protocol.JSONRPCResponse, ...]]]:
         if isinstance(data, typing.Sequence) and not isinstance(data, (str, bytes,)):
             if not data:
-                return protocol.JSONRPCResponse(error=errors.InvalidRequest()).dump()
+                return protocol.JSONRPCResponse(error=errors.InvalidRequest())
 
             if self._max_batch is not None and len(data) > self._max_batch:
                 return protocol.JSONRPCResponse(
                     error=errors.InvalidRequest(data={'details': 'Batch too large.'}),
-                ).dump()
+                )
 
             json_responses = await asyncio.gather(
                 *(
@@ -139,11 +139,9 @@ class BaseJSONRPCServer(abc.ABC):
         if isinstance(data, typing.Mapping):
             return await self._process_single_json_request(data, context=context)
 
-        response = protocol.JSONRPCResponse(
+        return protocol.JSONRPCResponse(
             error=errors.InvalidRequest(data={'details': 'Data must be a dict or a list.'}),
         )
-
-        return response.dump()
 
     @staticmethod
     def _raise_exception_if_have(values: typing.Iterable) -> typing.Iterable:
@@ -157,23 +155,23 @@ class BaseJSONRPCServer(abc.ABC):
     async def _process_single_json_request(self,
                                            json_request: typing.Any, *,
                                            context: typing.MutableMapping[str, typing.Any],
-                                           ) -> typing.Optional[typing.Mapping]:
+                                           ) -> typing.Optional[protocol.JSONRPCResponse]:
         if not isinstance(json_request, typing.Mapping):
             return protocol.JSONRPCResponse(
                 error=errors.InvalidRequest(data={'details': 'Data must be a dict.'}),
-            ).dump()
+            )
 
         try:
             request = protocol.JSONRPCRequest.load(json_request, context=context)
         except errors.JSONRPCError as e:
-            return protocol.JSONRPCResponse(id=json_request.get('id'), error=e).dump()
+            return protocol.JSONRPCResponse(id=json_request.get('id'), error=e)
 
         response = await self._middleware_chain(request)  # type: ignore
 
         if response.is_notification:
             return None
 
-        return response.dump()
+        return response
 
     async def _process_single_request(self, request: protocol.JSONRPCRequest) -> protocol.JSONRPCResponse:
         result, error = None, None
@@ -183,7 +181,7 @@ class BaseJSONRPCServer(abc.ABC):
                 request.method_name,
                 args=request.args,
                 kwargs=request.kwargs,
-                extra_args=request.extra_args,
+                extra_kwargs=request.extra_kwargs,
             )
         except errors.JSONRPCError as e:
             error = e

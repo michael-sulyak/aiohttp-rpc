@@ -7,7 +7,7 @@ import weakref
 from aiohttp import http_websocket, web, web_ws
 
 from .base import BaseJSONRPCServer
-from .. import errors, protocol, typedefs, utils
+from .. import errors, protocol, typedefs
 
 
 __all__ = (
@@ -101,13 +101,11 @@ class WSJSONRPCServer(BaseJSONRPCServer):
                                  ws_msg: web_ws.WSMessage, *,
                                  ws_connect: web_ws.WebSocketResponse,
                                  context: dict) -> None:
-        json_response: typing.Optional[typing.Union[typing.Mapping, typing.Sequence[typing.Mapping]]]
-
         try:
             input_data = json.loads(ws_msg.data)
-        except json.JSONDecodeError as e:
-            response = protocol.JSONRPCResponse(error=errors.ParseError(utils.get_exc_message(e)))
-            json_response = response.dump()
+        except json.JSONDecodeError:
+            logger.warning('Invalid JSON data: %s', ws_msg.data, exc_info=True)
+            output_data = protocol.JSONRPCResponse(error=errors.ParseError(data={'details': 'Invalid JSON'}))
         else:
             if self._looks_like_response(input_data):
                 if self._json_response_handler is not None:
@@ -119,16 +117,21 @@ class WSJSONRPCServer(BaseJSONRPCServer):
 
                 return
 
-            json_response = await self._process_input_data(input_data, context=context)
+            output_data = await self._process_input_data(input_data, context=context)  # type: ignore
 
-        if json_response is None:
+        if output_data is None:
             return
 
         if ws_connect.closed:
             logger.warning('WebSocket connection closed by client.')
             return
 
-        await ws_connect.send_str(self.json_serialize(json_response))
+        if isinstance(output_data, typing.Sequence):
+            raw_output_data = tuple(response.dump() for response in output_data)
+        else:
+            raw_output_data = output_data.dump()  # type: ignore
+
+        await ws_connect.send_str(self.json_serialize(raw_output_data))
 
     @staticmethod
     def _looks_like_response(data: typing.Any) -> bool:

@@ -78,8 +78,8 @@ async def test_several_requests(aiohttp_client):
         assert result == list(range(10))
 
 
-async def test_ws_client_for_server_response(aiohttp_client, mocker):
-    async def method(ws_rpc_client: aiohttp_rpc.WSJSONRPCClient):
+async def test_inject_ws_client_middleware(aiohttp_client, mocker):
+    async def method(*, ws_rpc_client: aiohttp_rpc.WSJSONRPCClient, **kwargs):
         await ws_rpc_client.notify('ping')
         await ws_rpc_client.notify('ping')
         await ws_rpc_client.notify('ping')
@@ -87,10 +87,10 @@ async def test_ws_client_for_server_response(aiohttp_client, mocker):
     rpc_server = aiohttp_rpc.WSJSONRPCServer(
         middlewares=[
             *aiohttp_rpc.middlewares.DEFAULT_MIDDLEWARES,
-            aiohttp_rpc.middlewares.ws_client_for_server_response,
+            aiohttp_rpc.middlewares.inject_ws_client_middleware,
         ],
     )
-    rpc_server.add_method(method)
+    rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(method, pass_extra_kwargs=True))
 
     client = await utils.make_ws_client(aiohttp_client, rpc_server)
 
