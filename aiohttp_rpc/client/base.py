@@ -3,7 +3,7 @@ import types
 import typing
 
 from .additional import JSONRPCClientMethods
-from .. import errors, protocol, utils
+from .. import errors, protocol, typedefs, utils
 
 
 __all__ = (
@@ -17,9 +17,15 @@ class BaseJSONRPCClient(abc.ABC):
         error.code: error
         for error in errors.DEFAULT_KNOWN_ERRORS
     }
+    _json_serialize: typedefs.JSONEncoderType
+    _json_deserialize: typedefs.JSONDecoderType
 
-    def __init__(self) -> None:
+    def __init__(self, *,
+                 json_serialize: typedefs.JSONEncoderType = utils.json_serialize,
+                 json_deserialize: typedefs.JSONDecoderType = utils.json_deserialize) -> None:
         self.methods = JSONRPCClientMethods(self)
+        self._json_serialize = json_serialize
+        self._json_deserialize = json_deserialize
 
     async def __aenter__(self) -> 'BaseJSONRPCClient':
         await self.connect()
@@ -125,11 +131,3 @@ class BaseJSONRPCClient(abc.ABC):
                         ignore_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
         pass
-
-    @staticmethod
-    def json_serialize(data: typing.Any) -> str:
-        return utils.json_serialize(data)
-
-    @staticmethod
-    def json_deserialize(data: str) -> typing.Any:
-        return utils.json_deserialize(data)

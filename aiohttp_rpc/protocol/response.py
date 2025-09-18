@@ -61,25 +61,25 @@ class JSONRPCResponse:
     @staticmethod
     def _validate_json_response(data: typing.Any) -> None:
         if not isinstance(data, typing.Mapping):
-            raise errors.InvalidRequest('Data must be a mapping.')
+            raise errors.ParseError('Data must be a mapping.')
 
         utils.validate_jsonrpc(data.get('jsonrpc'))
 
         if 'result' not in data and 'error' not in data:
-            raise errors.InvalidRequest('"result" or "error" not found in data.', data={'raw_response': data})
+            raise errors.ParseError('"result" or "error" not found in data.', data={'raw_response': data})
 
     @staticmethod
     def _add_error(response: 'JSONRPCResponse',
                    error: typing.Any, *,
                    error_map: typing.Optional[typing.Mapping] = None) -> None:
         if not isinstance(error, typing.Mapping):
-            raise errors.InvalidRequest(
+            raise errors.ParseError(
                 'The "error" field must be a mapping.',
                 data={'raw_error': error},
             )
 
         if not {'code', 'message'} <= error.keys():
-            raise errors.InvalidRequest(
+            raise errors.ParseError(
                 'The "error" field must contain "code" and "message".',
                 data={'raw_error': error},
             )
@@ -105,8 +105,16 @@ class JSONRPCBatchResponse:
              data: typing.Any, *,
              error_map: typing.Optional[typing.Mapping] = None,
              **kwargs) -> 'JSONRPCBatchResponse':
+        if isinstance(data, typing.Mapping):
+            parsed_response = JSONRPCResponse.load(data, error_map=error_map, **kwargs)
+
+            if parsed_response.error:
+                raise parsed_response.error
+            else:
+                raise errors.ParseError('Got an unexpected response from server')
+
         if not isinstance(data, typing.Sequence):
-            raise errors.InvalidRequest('A batch request must be of the list type.')
+            raise errors.InvalidRequest('Batch request must be of the list type')
 
         return cls(responses=tuple(
             JSONRPCResponse.load(item, error_map=error_map, **kwargs)

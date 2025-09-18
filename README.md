@@ -63,9 +63,6 @@ if __name__ == '__main__':
         echo,
     ])
 
-    # Optional: adds "get_methods" and "get_method" introspection methods.
-    aiohttp_rpc.rpc_server.add_introspection()
-
     app = web.Application()
     app.router.add_routes([
         web.post('/rpc', aiohttp_rpc.rpc_server.handle_http_request),
@@ -106,9 +103,6 @@ async def run():
         ))
         # Note: if one response in the batch is an error, the result list contains a JSONRPCError instance at that position.
 
-        # Introspection:
-        print('#10', await rpc.methods.get_methods())
-
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(run())
@@ -124,7 +118,6 @@ This prints:
 #7 JSONRPCResponse(id=123, jsonrpc='2.0', result='pong', error=None, context={'http_response': ...})
 #8 ('pong', {'args': ['one', 'two'], 'kwargs': {}}, {'args': [], 'kwargs': {'three': '3'}})
 #9 None
-#10 {'ping': {'doc': None, 'args': [], 'kwargs': []}, 'echo': {'doc': None, 'args': [], 'kwargs': []}, 'get_method': {'doc': None, 'args': ['name'], 'kwargs': []}, 'get_methods': {'doc': None, 'args': [], 'kwargs': []}}
 ```
 
 [back to top](#table-of-contents)
@@ -358,12 +351,10 @@ loop.run_until_complete(run())
 
 ### server
 - class JSONRPCServer(BaseJSONRPCServer)
-  - def __init__(self, *, json_serialize=json_serialize, middlewares=(), methods=None, max_batch=None, max_payload_bytes=1_048_576)
+  - def __init__(self, *, json_serialize=json_serialize, middlewares=(), methods=None, max_batch=None)
   - def add_method(self, method, *, replace=False) -> JSONRPCMethod
   - def add_methods(self, methods, replace=False) -> Tuple[JSONRPCMethod, ...]
   - def add_introspection(self) -> None
-  - def get_method(self, name) -> Optional[Mapping]
-  - def get_methods(self) -> Mapping[str, Mapping]
   - async def handle_http_request(self, http_request: web.Request) -> web.Response
 
 - class WSJSONRPCServer(BaseJSONRPCServer)

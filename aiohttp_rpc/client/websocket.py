@@ -5,7 +5,7 @@ import typing
 from aiohttp import ClientSession, http_websocket, web_ws
 
 from .base import BaseJSONRPCClient
-from .. import errors, typedefs
+from .. import errors, typedefs, utils
 
 
 __all__ = (
@@ -41,10 +41,15 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                  connection_check_interval: typing.Optional[float] = 5,
                  json_requests_handler: typing.Optional[typedefs.WSJSONRequestsHandler] = None,
                  unprocessed_json_responses_handler: typing.Optional[typedefs.UnprocessedWSJSONResponsesHandler] = None,
+                 json_serialize: typedefs.JSONEncoderType = utils.json_serialize,
+                 json_deserialize: typedefs.JSONDecoderType = utils.json_deserialize,
                  **ws_connect_kwargs) -> None:
         assert ws_connect is not None or url is not None
 
-        super().__init__()
+        super().__init__(
+            json_serialize=json_serialize,
+            json_deserialize=json_deserialize,
+        )
 
         self.url = url
         self._timeout = timeout
@@ -67,7 +72,7 @@ class WSJSONRPCClient(BaseJSONRPCClient):
         self._is_closed = False
 
         if self.session is None and self.ws_connect is None:
-            self.session = ClientSession(json_serialize=self.json_serialize)
+            self.session = ClientSession(json_serialize=self._json_serialize)
 
         if self.ws_connect is None:
             assert self.url is not None and self.session is not None
@@ -86,6 +91,10 @@ class WSJSONRPCClient(BaseJSONRPCClient):
     async def disconnect(self) -> None:
         self._is_closed = True
 
+        # Fail pending before closing so callers don’t hang
+        if self._pending:
+            self._notify_all_about_error(errors.TransportError(data={'details': 'Client closed'}))
+
         if self.ws_connect is not None and not self._ws_connect_is_outer:
             await self.ws_connect.close()
 
@@ -93,13 +102,7 @@ class WSJSONRPCClient(BaseJSONRPCClient):
             await self.session.close()
 
         if self._message_worker is not None:
-            try:
-                if self._ws_connect_is_outer:
-                    await asyncio.wait_for(self._message_worker, timeout=60)
-                else:
-                    await self._message_worker
-            except asyncio.TimeoutError:
-                logger.warning('Timed out waiting for message worker to finish on disconnect.')
+            await self._message_worker
 
         if self._check_worker is not None:
             self._check_worker.cancel()
@@ -117,19 +120,8 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                         ignore_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
 
-        async def _send(text: str, **kw):
-            assert self.ws_connect is not None
-
-            try:
-                await self.ws_connect.send_str(text, **kw)
-            except (ConnectionResetError, RuntimeError, OSError) as e:
-                logger.warning('WS send failed', exc_info=True)
-                error = errors.TransportError()
-                self._notify_all_about_error(error)
-                raise error from e
-
         if ignore_response:
-            await _send(self.json_serialize(data), **kwargs)
+            await self._send_raw_data(self._json_serialize(data), **kwargs)
             return None, None
 
         request_ids = self._get_ids_from_json(data)
@@ -139,7 +131,7 @@ class WSJSONRPCClient(BaseJSONRPCClient):
         for request_id in request_ids:
             self._pending[request_id] = future
 
-        await _send(self.json_serialize(data), **kwargs)
+        await self._send_raw_data(self._json_serialize(data), **kwargs)
 
         if not request_ids:
             return None, None
@@ -158,6 +150,17 @@ class WSJSONRPCClient(BaseJSONRPCClient):
             raise
 
         return result, None
+
+    async def _send_raw_data(self, text: str, **kwargs) -> None:
+        assert self.ws_connect is not None
+
+        try:
+            await self.ws_connect.send_str(text, **kwargs)
+        except (ConnectionResetError, RuntimeError, OSError) as e:
+            logger.warning('WS send failed', exc_info=True)
+            error = errors.TransportError()
+            self._notify_all_about_error(error)
+            raise error from e
 
     @staticmethod
     def _get_ids_from_json(data: typing.Any) -> typing.Tuple[typedefs.JSONRPCIDType, ...]:
@@ -238,7 +241,7 @@ class WSJSONRPCClient(BaseJSONRPCClient):
             return
 
         try:
-            json_response = self.json_deserialize(ws_msg.data)
+            json_response = self._json_deserialize(ws_msg.data)
         except Exception:
             logger.warning('Can\'t parse json.', exc_info=True)
             return

@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import logging
 import typing
 from functools import partial
 
@@ -10,33 +11,35 @@ __all__ = (
     'BaseJSONRPCServer',
 )
 
+logger = logging.getLogger(__name__)
+
 
 class BaseJSONRPCServer(abc.ABC):
     methods: typing.MutableMapping[str, protocol.BaseJSONRPCMethod]
     middlewares: typing.Sequence[typing.Callable]
-    json_serialize: typedefs.UnboundJSONEncoderType
+    _json_serialize: typedefs.JSONEncoderType
+    _json_deserialize: typedefs.JSONDecoderType
     _middleware_chain: typedefs.UnboundSingleRequestProcessorType
     _max_batch: typing.Optional[int]
-    _max_payload_bytes: typing.Optional[int]
 
     def __init__(self, *,
                  json_serialize: typedefs.JSONEncoderType = utils.json_serialize,
+                 json_deserialize: typedefs.JSONDecoderType = utils.json_deserialize,
                  middlewares: typing.Sequence = (),
                  methods: typing.Optional[typing.MutableMapping[str, protocol.BaseJSONRPCMethod]] = None,
-                 max_batch: typing.Optional[int] = None,
-                 max_payload_bytes: typing.Optional[int] = 1_048_576) -> None:
+                 max_batch: typing.Optional[int] = None) -> None:
         self.methods = methods or {}
 
         self.middlewares = middlewares
         self._load_middlewares()
 
-        self.json_serialize = json_serialize  # type: ignore
+        self._json_serialize = json_serialize
+        self._json_deserialize = json_deserialize
 
         self._max_batch = max_batch
-        self._max_payload_bytes = max_payload_bytes
 
     def add_method(self,
-                   method: typing.Union[typedefs.ServerMethodDescriptionType], *,
+                   method: typedefs.ServerMethodDescriptionType, *,
                    replace: bool = False) -> protocol.BaseJSONRPCMethod:
         if not isinstance(method, protocol.BaseJSONRPCMethod):
             method = protocol.JSONRPCMethod(method)
@@ -68,34 +71,9 @@ class BaseJSONRPCServer(abc.ABC):
             kwargs = {}
 
         if method_name not in self.methods:
-            raise errors.MethodNotFound
+            raise errors.MethodNotFound()
 
         return await self.methods[method_name](args=args, kwargs=kwargs, extra_kwargs=extra_kwargs)
-
-    def get_methods(self) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
-        return {
-            name: {
-                'doc': method.doc,
-                'args': method.supported_args,
-                'kwargs': method.supported_kwargs,
-            }
-            for name, method in self.methods.items()
-        }
-
-    def get_method(self, name: str) -> typing.Optional[typing.Mapping[str, typing.Any]]:
-        method = self.methods.get(name)
-
-        if not method:
-            return None
-
-        return {
-            'doc': method.doc,
-            'args': method.supported_args,
-            'kwargs': method.supported_kwargs,
-        }
-
-    def add_introspection(self) -> None:
-        self.add_methods((self.get_method, self.get_methods,))
 
     def _load_middlewares(self) -> None:
         self._middleware_chain = self._process_single_request  # type: ignore
@@ -130,25 +108,30 @@ class BaseJSONRPCServer(abc.ABC):
 
             result = tuple(
                 json_response
-                for json_response in self._raise_exception_if_have(json_responses)
+                for json_response in self._process_exceptions_if_have(json_responses)
                 if json_response is not None  # Skip notifications.
             )
 
             return result or None
 
         if isinstance(data, typing.Mapping):
-            return await self._process_single_json_request(data, context=context)
+            try:
+                return await self._process_single_json_request(data, context=context)
+            except Exception:
+                logger.exception('Unexpected error')
+                return protocol.JSONRPCResponse(error=errors.InternalError())
 
         return protocol.JSONRPCResponse(
             error=errors.InvalidRequest(data={'details': 'Data must be a dict or a list.'}),
         )
 
     @staticmethod
-    def _raise_exception_if_have(values: typing.Iterable) -> typing.Iterable:
+    def _process_exceptions_if_have(values: typing.Iterable) -> typing.Iterable:
         for i, value in enumerate(values):
             if isinstance(value, Exception):
                 # Use middlewares (`exception_middleware`) to process exceptions.
-                raise value
+                logger.exception('Unexpected error', exc_info=value)
+                yield protocol.JSONRPCResponse(error=errors.InternalError())
             else:
                 yield value
 

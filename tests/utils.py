@@ -4,8 +4,8 @@ from aiohttp import web
 import aiohttp_rpc
 
 
-async def make_client(aiohttp_client, rpc_server: aiohttp_rpc.JSONRPCServer) -> aiohttp.ClientSession:
-    app = web.Application()
+async def make_client(aiohttp_client, rpc_server: aiohttp_rpc.JSONRPCServer, **app_params) -> aiohttp.ClientSession:
+    app = web.Application(**app_params)
     app.router.add_post('/rpc', rpc_server.handle_http_request)
     return await aiohttp_client(app)
 

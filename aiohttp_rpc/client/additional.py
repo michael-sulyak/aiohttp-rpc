@@ -1,5 +1,5 @@
 import typing
-from functools import lru_cache
+from collections import OrderedDict
 
 from .. import protocol, utils
 
@@ -40,10 +40,24 @@ class JSONRPCClientMethod:
 
 class JSONRPCClientMethods:
     __client: 'base.BaseJSONRPCClient'
+    __cache: typing.OrderedDict[str, JSONRPCClientMethod]
+    __max_cache_size: int
 
-    def __init__(self, client: 'base.BaseJSONRPCClient') -> None:
+    def __init__(self, client: 'base.BaseJSONRPCClient', *, max_cache_size: int = 1024) -> None:
         self.__client = client
+        self.__cache = OrderedDict()
+        self.__max_cache_size = max_cache_size
 
-    @lru_cache(maxsize=100)
     def __getattr__(self, method_name: str) -> JSONRPCClientMethod:
-        return JSONRPCClientMethod(self.__client, method_name=method_name)
+        if method_name in self.__cache:
+            method = self.__cache.pop(method_name)
+            self.__cache[method_name] = method
+            return method
+
+        method = JSONRPCClientMethod(self.__client, method_name=method_name)
+        self.__cache[method_name] = method
+
+        if len(self.__cache) > self.__max_cache_size:
+            self.__cache.popitem(last=False)
+
+        return method

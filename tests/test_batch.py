@@ -191,8 +191,8 @@ async def test_http_max_batch(aiohttp_client):
 
 
 async def test_http_max_payload(aiohttp_client):
-    server = aiohttp_rpc.JSONRPCServer(max_payload_bytes=10)
-    client = await utils.make_client(aiohttp_client, server)
+    server = aiohttp_rpc.JSONRPCServer()
+    client = await utils.make_client(aiohttp_client, server, client_max_size=10)
 
     async with aiohttp_rpc.JSONRPCClient('/rpc', session=client) as rpc:
         with pytest.raises(aiohttp_rpc.errors.HTTPStatusError):

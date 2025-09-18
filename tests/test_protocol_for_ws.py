@@ -144,7 +144,7 @@ async def test_rpc_call_with_invalid_json(aiohttp_client, mocker):
             '_handle_single_ws_message',
             side_effect=rpc._handle_single_ws_message,
         )
-        rpc.json_serialize = lambda x: x
+        rpc._json_serialize = lambda x: x
         result = await rpc.send_json('{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]')
         assert result == (None, None,)
         await asyncio.wait_for(future, timeout=3)

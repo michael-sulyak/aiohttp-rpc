@@ -1,6 +1,8 @@
 import logging
 import typing
 
+from aiohttp import web
+
 from . import client, errors, protocol
 
 
@@ -9,6 +11,7 @@ __all__ = (
     'inject_request_middleware',
     'logging_middleware',
     'inject_ws_client_middleware',
+    'check_origins',
     'DEFAULT_MIDDLEWARES',
 )
 
@@ -56,7 +59,7 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
     raw_request = request.dump()
 
     logger.info(
-        'RpcRequest id="%s" method="%s" params="%s"',
+        'JSON RPC Request id="%s" method="%s" params="%s"',
         raw_request.get('id', ''),
         raw_request['method'],
         raw_request.get('params', ''),
@@ -68,7 +71,7 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
     raw_response = response.dump()
 
     logger.info(
-        'RpcResponse id="%s" method="%s" params="%s" result="%s" error="%s"',
+        'JSON RPC Response id="%s" method="%s" params="%s" result="%s" error="%s"',
         raw_request.get('id', ''),
         raw_request['method'],
         raw_request.get('params', ''),
@@ -83,9 +86,25 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
 async def inject_ws_client_middleware(request: protocol.JSONRPCRequest,
                                       handler: typing.Callable) -> protocol.JSONRPCResponse:
     ws_connect = request.context['ws_connect']
-    request.context['ws_client'] = client.WSJSONRPCClient(ws_connect=ws_connect)
-    request.extra_kwargs['ws_rpc_client'] = request.context['ws_client']
+    request.context['ws_rpc_client'] = client.WSJSONRPCClient(ws_connect=ws_connect)
+    request.extra_kwargs['ws_rpc_client'] = request.context['ws_rpc_client']
     return await handler(request)
+
+
+def check_origins(allowed_origins: typing.Iterable[str]) -> typing.Callable:
+    allowed_origins = set(allowed_origins)
+
+    async def _check_origins(request: protocol.JSONRPCRequest,
+                             handler: typing.Callable) -> protocol.JSONRPCResponse:
+        http_request = request.context['http_request']
+        origin = http_request.headers.get('Origin')
+
+        if origin not in allowed_origins:
+            raise web.HTTPForbidden(reason='Origin not allowed')
+
+        return await handler(request)
+
+    return _check_origins
 
 
 DEFAULT_MIDDLEWARES = (

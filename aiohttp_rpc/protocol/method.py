@@ -14,9 +14,6 @@ __all__ = (
 
 class BaseJSONRPCMethod(abc.ABC):
     name: str
-    doc: typing.Optional[str] = None
-    supported_args: typing.Tuple[str, ...] = ()
-    supported_kwargs: typing.Tuple[str, ...] = ()
 
     @abc.abstractmethod
     async def __call__(self,
@@ -26,15 +23,7 @@ class BaseJSONRPCMethod(abc.ABC):
         pass
 
     def __repr__(self) -> str:
-        args = ', '.join(self.supported_args)
-
-        if self.supported_args and self.supported_kwargs:
-            args += ', *, '
-
-        if self.supported_kwargs:
-            args += ', '.join(self.supported_kwargs)
-
-        return f'JSONRPCMethod({self.name}({args}))'
+        return f'{self.__class__.__name__}({self.name})'
 
 
 class JSONRPCMethod(BaseJSONRPCMethod):
@@ -42,6 +31,7 @@ class JSONRPCMethod(BaseJSONRPCMethod):
     is_class: bool
     _pass_extra_kwargs: bool
     _prepare_result: typing.Optional[typing.Callable]
+    _signature: inspect.Signature
 
     def __init__(self,
                  func: typing.Callable, *,
@@ -51,8 +41,7 @@ class JSONRPCMethod(BaseJSONRPCMethod):
         assert callable(func)
 
         self.func = func
-        self.name = name if name is not None else func.__name__
-        self.doc = self.func.__doc__
+        self.name = func.__name__ if name is None else name
 
         self._pass_extra_kwargs = pass_extra_kwargs
         self._prepare_result = prepare_result
@@ -83,11 +72,16 @@ class JSONRPCMethod(BaseJSONRPCMethod):
         self.is_class = inspect.isclass(self.func)
         self.is_coroutine = asyncio.iscoroutinefunction(self.func)
 
+        if self.is_class:
+            self._signature = inspect.signature(self.func.__init__)
+        else:
+            self._signature = inspect.signature(self.func)
+
     def _check_func_signature(self, args: typing.Sequence, kwargs: typing.Mapping) -> None:
         try:
             if self.is_class:
-                inspect.signature(self.func.__init__).bind(None, *args, **kwargs)  # type: ignore
+                self._signature.bind(None, *args, **kwargs)  # type: ignore
             else:
-                inspect.signature(self.func).bind(*args, **kwargs)
+                self._signature.bind(*args, **kwargs)
         except TypeError as e:
             raise errors.InvalidParams() from e

@@ -102,7 +102,7 @@ class WSJSONRPCServer(BaseJSONRPCServer):
                                  ws_connect: web_ws.WebSocketResponse,
                                  context: dict) -> None:
         try:
-            input_data = json.loads(ws_msg.data)
+            input_data = self._json_deserialize(ws_msg.data)
         except json.JSONDecodeError:
             logger.warning('Invalid JSON data: %s', ws_msg.data, exc_info=True)
             output_data = protocol.JSONRPCResponse(error=errors.ParseError(data={'details': 'Invalid JSON'}))
@@ -131,7 +131,7 @@ class WSJSONRPCServer(BaseJSONRPCServer):
         else:
             raw_output_data = output_data.dump()  # type: ignore
 
-        await ws_connect.send_str(self.json_serialize(raw_output_data))
+        await ws_connect.send_str(self._json_serialize(raw_output_data))
 
     @staticmethod
     def _looks_like_response(data: typing.Any) -> bool:

@@ -4,9 +4,7 @@ __all__ = (
 )
 
 
-class NOTHING:
-    pass
-
+NOTHING = object()
 
 VERSION_2_0 = '2.0'
 
