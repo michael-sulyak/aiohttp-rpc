@@ -65,8 +65,14 @@ class JSONRPCResponse:
 
         utils.validate_jsonrpc(data.get('jsonrpc'))
 
-        if 'result' not in data and 'error' not in data:
+        has_result = 'result' in data
+        has_error = 'error' in data
+
+        if not has_result and not has_error:
             raise errors.ParseError('"result" or "error" not found in data.', data={'raw_response': data})
+
+        if has_result and has_error:
+            raise errors.ParseError('Response must not include both "result" and "error".', data={'raw_response': data})
 
     @staticmethod
     def _add_error(response: 'JSONRPCResponse',
@@ -111,10 +117,10 @@ class JSONRPCBatchResponse:
             if parsed_response.error:
                 raise parsed_response.error
             else:
-                raise errors.ParseError('Got an unexpected response from server')
+                raise errors.ParseError('Got an unexpected response from server.')
 
         if not isinstance(data, typing.Sequence):
-            raise errors.InvalidRequest('Batch request must be of the list type')
+            raise errors.InvalidRequest('Batch request must be of the list type.')
 
         return cls(responses=tuple(
             JSONRPCResponse.load(item, error_map=error_map, **kwargs)

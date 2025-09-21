@@ -73,7 +73,12 @@ class JSONRPCClient(BaseJSONRPCClient):
                 raise errors.EmptyResponse()
 
             # Non-2xx with empty body: transport-level error
-            raise errors.HTTPStatusError(data={'status': http_response.status, 'message': http_response.reason})
+            raise errors.HTTPStatusError(
+                data={
+                    'status': http_response.status,
+                    'message': http_response.reason,
+                },
+            )
 
         # Try to parse JSON regardless of Content-Type:
         try:
@@ -88,7 +93,7 @@ class JSONRPCClient(BaseJSONRPCClient):
                 data={
                     'status': http_response.status,
                     'message': http_response.reason,
-                },
+                    'body': body_text[:512]},
             ) from e
 
         # If we got JSON, hand it to the protocol layer even on non-2xx:

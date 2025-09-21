@@ -135,3 +135,8 @@ DEFAULT_KNOWN_ERRORS = frozenset({
     InvalidParams,
     InternalError,
 })
+
+DEFAULT_KNOWN_ERRORS_MAP = {
+    error.code: error
+    for error in DEFAULT_KNOWN_ERRORS
+}

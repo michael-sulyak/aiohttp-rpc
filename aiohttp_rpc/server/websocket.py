@@ -49,7 +49,7 @@ class WSJSONRPCServer(BaseJSONRPCServer):
             origin = http_request.headers.get('Origin')
 
             if origin not in self.allowed_origins:
-                raise web.HTTPForbidden(reason='Origin not allowed')
+                raise web.HTTPForbidden(reason='Origin not allowed.')
 
         return await self._handle_ws_request(http_request)
 
@@ -114,6 +114,8 @@ class WSJSONRPCServer(BaseJSONRPCServer):
                         ws_msg=ws_msg,
                         json_response=input_data,
                     )
+                else:
+                    logger.debug('WS server received response-shaped message but no handler is set.')
 
                 return
 

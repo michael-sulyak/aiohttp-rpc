@@ -29,7 +29,7 @@
 
 ## Installation
 
-#### pip
+### pip
 ```sh
 pip install aiohttp-rpc
 ```
@@ -44,21 +44,18 @@ import aiohttp_rpc
 
 
 def echo(*args, **kwargs):
-    return {
-        'args': args,
-        'kwargs': kwargs,
-    }
+    return {'args': args, 'kwargs': kwargs}
 
 # If a method accepts a parameter named "rpc_request",
-# make sure the method is added with pass_extra_kwargs=True
-# and the server uses inject_request_middleware (included in DEFAULT_MIDDLEWARES).
+# add it with pass_extra_kwargs=True and use inject_request_middleware
+# (included in DEFAULT_MIDDLEWARES).
 async def ping(rpc_request):
     return 'pong'
 
 
 if __name__ == '__main__':
+    # Pre-configured server with default middlewares.
     aiohttp_rpc.rpc_server.add_methods([
-        # Ensure "rpc_request" is injected:
         aiohttp_rpc.JSONRPCMethod(ping, pass_extra_kwargs=True),
         echo,
     ])
@@ -73,39 +70,41 @@ if __name__ == '__main__':
 ### HTTP Client Example
 
 ```python
-import aiohttp_rpc
 import asyncio
+import aiohttp_rpc
 
 
 async def run():
     async with aiohttp_rpc.JSONRPCClient('http://0.0.0.0:8080/rpc') as rpc:
         # Idiomatic calls:
-        print('#1', await rpc.methods.ping())  # Call without arguments.
-        print('#2', await rpc.methods.echo('one', 'two'))  # Positional args.
-        print('#3', await rpc.methods.echo(three='3'))  # Keyword args (use either args or kwargs, not both).
-        # Note: if the server returns an error, an exception is raised.
+        print('#1', await rpc.methods.ping())                      # No args
+        print('#2', await rpc.methods.echo('one', 'two'))          # Positional args
+        print('#3', await rpc.methods.echo(three='3'))             # Keyword args
 
         # Lower-level calls:
         print('#4', await rpc.call('echo', three='3'))
-        print('#5', await rpc.notify('echo', 123))
-        print('#7', await rpc.direct_call(aiohttp_rpc.JSONRPCRequest(id=123, method_name='ping')))
+        await rpc.notify('echo', 123)                              # Notification
 
-        # Batch calls:
-        print('#8', await rpc.batch(
-            rpc.methods.ping.request(),                   # Returns JSONRPCRequest with a generated id.
+        # Direct call returns a JSONRPCResponse object:
+        resp = await rpc.direct_call(aiohttp_rpc.JSONRPCRequest(id=123, method_name='ping'))
+        print('#5', resp)
+
+        # Batch calls (order preserved by default):
+        print('#6', await rpc.batch(
+            rpc.methods.ping.request(),
             rpc.methods.echo.request('one', 'two'),
             rpc.methods.echo.request(three='3'),
         ))
-        print('#9', await rpc.batch_notify(               # Does not wait for responses.
-            rpc.methods.ping.notification(),              # Returns JSONRPCRequest without "id".
+
+        # Fire-and-forget batch notifications:
+        await rpc.batch_notify(
+            rpc.methods.ping.notification(),
             rpc.methods.echo.notification('one', 'two'),
             rpc.methods.echo.notification(three='3'),
-        ))
-        # Note: if one response in the batch is an error, the result list contains a JSONRPCError instance at that position.
+        )
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run())
+asyncio.run(run())
 ```
 
 This prints:
@@ -114,25 +113,17 @@ This prints:
 #2 {'args': ['one', 'two'], 'kwargs': {}}
 #3 {'args': [], 'kwargs': {'three': '3'}}
 #4 {'args': [], 'kwargs': {'three': '3'}}
-#5 None
-#7 JSONRPCResponse(id=123, jsonrpc='2.0', result='pong', error=None, context={'http_response': ...})
-#8 ('pong', {'args': ['one', 'two'], 'kwargs': {}}, {'args': [], 'kwargs': {'three': '3'}})
-#9 None
+#5 JSONRPCResponse(id=123, jsonrpc='2.0', result='pong', error=None, context={'http_response': ...})
+#6 ('pong', {'args': ['one', 'two'], 'kwargs': {}}, {'args': [], 'kwargs': {'three': '3'}})
 ```
 
 [back to top](#table-of-contents)
 
 ---
 
-<p align="center"><b>↑ This is enough to start :sunglasses: ↑</b></p>
-
----
-
 ## Integration
 
-This library should simplify your life, not complicate it.
-
-Existing functions may return objects that are not JSON-serializable — that’s easy to fix by supplying a custom serializer:
+Need to serialize non-JSON types? Provide a custom serializer:
 
 ```python
 from aiohttp import web
@@ -157,11 +148,7 @@ async def get_user_by_uuid(user_uuid) -> User:
 
 def json_serialize_unknown_value(value):
     if isinstance(value, User):
-        return {
-            'uuid': str(value.uuid),
-            'username': value.username,
-            'email': value.email,
-        }
+        return {'uuid': str(value.uuid), 'username': value.username, 'email': value.email}
     return repr(value)
 
 
@@ -176,23 +163,9 @@ if __name__ == '__main__':
         web.post('/rpc', rpc_server.handle_http_request),
     ])
     web.run_app(app, host='0.0.0.0', port=8080)
-...
-
-"""
-Example of response:
-{
-    "id": 1,
-    "jsonrpc": "2.0",
-    "result": {
-        "uuid": "600d57b3-dda8-43d0-af79-3e81dbb344fa",
-        "username": "mike",
-        "email": "some@mail.com"
-    }
-}
-"""
 ```
 
-You can also accept custom types by converting them in middleware:
+Convert incoming custom types with middleware:
 
 ```python
 # RPC method that takes a custom type.
@@ -203,14 +176,12 @@ def generate_user_token(user: User):
 async def replace_type(data):
     if not isinstance(data, dict) or '__type__' not in data:
         return data
-
     if data['__type__'] == 'user':
         return await get_user_by_uuid(data['uuid'])
-
     raise aiohttp_rpc.errors.InvalidParams
 
 
-# Middleware that converts types before the method is called.
+# Middleware that converts arguments before the method call.
 async def type_conversion_middleware(request, handler):
     request.set_args_and_kwargs(
         args=[await replace_type(arg) for arg in request.args],
@@ -224,27 +195,7 @@ rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=[
     aiohttp_rpc.middlewares.inject_request_middleware,
     type_conversion_middleware,
 ])
-
-"""
-Request:
-{
-    "id": 1234,
-    "jsonrpc": "2.0",
-    "method": "generate_user_token",
-    "params": [{"__type__": "user", "uuid": "600d57b3-dda8-43d0-af79-3e81dbb344fa"}]
-}
-
-Response:
-{
-    "id": 1234,
-    "jsonrpc": "2.0",
-    "result": "token-600d57b3"
-}
-"""
 ```
-
-Middleware lets you adapt arguments, results, and more.  
-If you need permission checks per method, you can override JSONRPCMethod or write middleware.
 
 [back to top](#table-of-contents)
 
@@ -252,7 +203,7 @@ If you need permission checks per method, you can override JSONRPCMethod or writ
 
 ## Middleware
 
-Middleware processes JSON-RPC requests and responses and has an interface similar to [aiohttp middleware](https://docs.aiohttp.org/en/stable/web_advanced.html#middlewares).
+Middleware has an interface similar to aiohttp’s web middleware:
 
 ```python
 import aiohttp_rpc
@@ -261,9 +212,9 @@ import typing
 
 async def simple_middleware(request: aiohttp_rpc.JSONRPCRequest,
                             handler: typing.Callable) -> aiohttp_rpc.JSONRPCResponse:
-    # Runs before the method (and downstream middleware).
+    # Before the method (and downstream middleware)
     response = await handler(request)
-    # Runs after the method.
+    # After the method
     return response
 
 
@@ -273,11 +224,22 @@ rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=[
 ])
 ```
 
-Note about injecting the request object:
-- inject_request_middleware stores the JSON-RPC request object as extra kwargs under the name "rpc_request".
-- Methods receive these extra kwargs only if they were added with pass_extra_kwargs=True (e.g., via JSONRPCMethod(..., pass_extra_kwargs=True) or the @rpc_method decorator, which defaults to pass_extra_kwargs=True).
+Included middlewares:
+- exception_middleware — catches exceptions, converts to JSON-RPC errors (logging included).
+- inject_request_middleware — stores the request object in extra kwargs as "rpc_request". Methods receive it only if added with pass_extra_kwargs=True.
+- logging_middleware — logs raw JSON-RPC requests and responses.
+- inject_ws_client_middleware — on WS server, attaches a WS client to the request so your method can send JSON-RPC messages back over the same socket (see below).
+- check_origins(allowed_origins) — factory returning middleware that permits only the listed HTTP Origin values (for HTTP endpoints).
 
-You can also use aiohttp middlewares to process web.Request/web.Response.
+DEFAULT_MIDDLEWARES:
+```python
+DEFAULT_MIDDLEWARES = (
+    exception_middleware,
+    inject_request_middleware,
+)
+```
+
+You can also use aiohttp web middlewares for web.Request/web.Response processing.
 
 [back to top](#table-of-contents)
 
@@ -303,9 +265,10 @@ async def ping(rpc_request):
 if __name__ == '__main__':
     rpc_server = aiohttp_rpc.WSJSONRPCServer(
         middlewares=aiohttp_rpc.middlewares.DEFAULT_MIDDLEWARES,
+        # allowed_origins={'https://example.com'},  # optional Origin check
     )
     rpc_server.add_methods([
-        aiohttp_rpc.JSONRPCMethod(ping, pass_extra_kwargs=True),  # to receive "rpc_request"
+        aiohttp_rpc.JSONRPCMethod(ping, pass_extra_kwargs=True),
         echo,
     ])
 
@@ -317,21 +280,26 @@ if __name__ == '__main__':
     web.run_app(app, host='0.0.0.0', port=8080)
 ```
 
+Options:
+- allowed_origins: an optional container of allowed Origin values. Requests with other origins get HTTP 403.
+- json_response_handler: optional callback invoked if the server receives a response-shaped message (useful if the server also acts as a client over the same connection).
+- ws_response_cls / ws_response_kwargs: customize the WebSocketResponse class and options (default max_msg_size is 1_048_576 bytes).
+
 ### WS Client Example
 
 ```python
-import aiohttp_rpc
 import asyncio
+import aiohttp_rpc
 
 
 async def run():
     async with aiohttp_rpc.WSJSONRPCClient('http://0.0.0.0:8080/rpc') as rpc:
-        print(await rpc.methods.ping())                      # Request + wait for response.
-        print(await rpc.methods.echo('request'))            # Positional args.
-        await rpc.methods.echo.notify('notification')       # Notification (no response expected).
-        print(rpc.methods.echo.request('some request'))     # Build a JSONRPCRequest for batching.
-        print(rpc.methods.echo.notification('some notification'))  # Notification object (no id).
-        print(await rpc.notify('ping'))                     # None
+        print(await rpc.methods.ping())
+        print(await rpc.methods.echo('request'))          # args
+        await rpc.methods.echo.notify('notification')     # notification (no response)
+        print(rpc.methods.echo.request('some request'))   # JSONRPCRequest for batching
+        print(rpc.methods.echo.notification(a=1))         # JSONRPCRequest without id
+        await rpc.notify('ping')                          # returns None
         print(await rpc.batch(
             rpc.methods.echo.request('test'),
             rpc.methods.echo.notification(a=1, b=2),
@@ -339,8 +307,28 @@ async def run():
         ))
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run())
+asyncio.run(run())
+```
+
+### Server-initiated messages over the same WS
+
+To allow a method to send JSON-RPC requests back to the client over the same WebSocket connection, enable the middleware and declare the parameter:
+
+```python
+import aiohttp_rpc
+
+async def server_push(ws_rpc_client):  # <-- added by middleware
+    # call back to the connected client:
+    return await ws_rpc_client.call('client_method', 42)
+
+rpc_server = aiohttp_rpc.WSJSONRPCServer(
+    middlewares=[
+        aiohttp_rpc.middlewares.exception_middleware,
+        aiohttp_rpc.middlewares.inject_request_middleware,
+        aiohttp_rpc.middlewares.inject_ws_client_middleware,  # attaches ws_rpc_client
+    ],
+)
+rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(server_push, pass_extra_kwargs=True))
 ```
 
 [back to top](#table-of-contents)
@@ -350,62 +338,79 @@ loop.run_until_complete(run())
 ## API Reference
 
 ### server
+
 - class JSONRPCServer(BaseJSONRPCServer)
-  - def __init__(self, *, json_serialize=json_serialize, middlewares=(), methods=None, max_batch=None)
+  - def __init__(self, *, json_serialize=json_serialize, json_deserialize=json_deserialize, middlewares=(), methods=None, max_batch=None)
   - def add_method(self, method, *, replace=False) -> JSONRPCMethod
-  - def add_methods(self, methods, replace=False) -> Tuple[JSONRPCMethod, ...]
-  - def add_introspection(self) -> None
+  - def add_methods(self, methods, *, replace=False) -> Tuple[JSONRPCMethod, ...]
   - async def handle_http_request(self, http_request: web.Request) -> web.Response
 
 - class WSJSONRPCServer(BaseJSONRPCServer)
+  - def __init__(..., allowed_origins: Optional[Container[str]] = None, json_response_handler: Optional[Callable] = None, ws_response_cls=WebSocketResponse, ws_response_kwargs=None)
   - async def handle_http_request(self, http_request: web.Request) -> web.StreamResponse
   - async def on_shutdown(self, app: web.Application) -> None
 
 - rpc_server: JSONRPCServer (pre-configured with DEFAULT_MIDDLEWARES)
 
 ### client
+
 - class JSONRPCClient(BaseJSONRPCClient)
-  - async def connect(self) -> None
-  - async def disconnect(self) -> None
-  - async def call(self, method: str, *args, **kwargs)
+  - def __init__(self, url, *, session: Optional[aiohttp.ClientSession] = None, json_serialize=json_serialize, json_deserialize=json_deserialize, **request_kwargs)
+    - request_kwargs are passed to ClientSession(...)
+  - async def connect() -> None
+  - async def disconnect() -> None
+  - async def call(self, method: str, *args, **kwargs) -> Any
   - async def notify(self, method: str, *args, **kwargs) -> None
   - async def batch(self, *requests, save_order: bool = True) -> Sequence
   - async def batch_notify(self, *requests) -> None
   - async def direct_call(self, request: JSONRPCRequest, **request_kwargs) -> Optional[JSONRPCResponse]
   - async def direct_batch(self, batch_request: JSONRPCBatchRequest, **request_kwargs) -> Optional[JSONRPCBatchResponse]
-  - methods: JSONRPCClientMethods (dynamic attribute access to remote methods)
+    - request_kwargs go to aiohttp.ClientSession.post(...)
+    - On success, response.context contains {'http_response': aiohttp.ClientResponse}
 
-- class WSJSONRPCClient(BaseJSONRPCClient) — same high-level API as the HTTP client, over WebSockets.
+- class WSJSONRPCClient(BaseJSONRPCClient)
+  - def __init__(self, url: Optional[str] = None, *, session: Optional[aiohttp.ClientSession] = None, ws_connect: Optional[WSConnectType] = None, timeout: Optional[float] = 60, timeout_for_data_receiving: Optional[float] = 60, connection_check_interval: Optional[float] = 5, json_requests_handler: Optional[WSJSONRequestsHandler] = None, unprocessed_json_responses_handler: Optional[UnprocessedWSJSONResponsesHandler] = None, json_serialize=json_serialize, json_deserialize=json_deserialize, **ws_connect_kwargs)
+  - async def connect() -> None
+  - async def disconnect() -> None
+  - Same high-level API as HTTP client; errors include RequestTimeoutError, TransportError, ServerError.
+
+- Common to both clients
+  - constructor arg error_map: Mapping[int, Type[JSONRPCError]] (default: DEFAULT_KNOWN_ERRORS_MAP) for mapping server error codes to custom exception types.
+  - methods: JSONRPCClientMethods — dynamic attribute access for remote methods with helpers:
+    - await rpc.methods.method_name(...)
+    - await rpc.methods.method_name.notify(...)
+    - rpc.methods.method_name.request(...) -> JSONRPCRequest
+    - rpc.methods.method_name.notification(...) -> JSONRPCRequest (no id)
 
 ### protocol
+
 - class JSONRPCRequest
-  - id: Union[int, str, None]
-  - method_name: str
-  - jsonrpc: str
-  - extra_kwargs: MutableMapping
-  - context: MutableMapping
-  - params: Any
-  - args: Optional[Sequence]
-  - kwargs: Optional[Mapping]
+  - id: Union[int, str, None]; method_name: str; jsonrpc: str; extra_kwargs: MutableMapping; context: MutableMapping
+  - params: Any; args: Optional[Sequence]; kwargs: Optional[Mapping]
   - is_notification: bool
+  - methods: set_params(...), set_args_and_kwargs(...), dump(), load(...)
 
 - class JSONRPCResponse
-  - id: Union[int, str, None]
-  - jsonrpc: str
-  - result: Any
-  - error: Optional[JSONRPCError]
-  - context: MutableMapping
+  - id: Union[int, str, None]; jsonrpc: str; result: Any; error: Optional[JSONRPCError]; context: MutableMapping
+  - dump(), load(...)
+
+- class JSONRPCBatchResponse
+  - responses: Tuple[JSONRPCResponse, ...]; dump(), load(...)
 
 - class JSONRPCMethod(BaseJSONRPCMethod)
   - def __init__(self, func, *, name=None, pass_extra_kwargs=False, prepare_result=None)
+    - prepare_result can be sync or async; if provided, it post-processes the method result.
 
-- class JSONRPCUnlinkedResults
-- class JSONRPCDuplicatedResults
+- class JSONRPCUnlinkedResults / JSONRPCDuplicatedResults
+  - Utilities used by collect_batch_result.
 
 ### decorators
+
 - def rpc_method(name: Optional[str] = None, *, rpc_server=default_rpc_server, pass_extra_kwargs=True, prepare_result=None)
+  - Registers the function on the default HTTP rpc_server at import time.
 
 ### errors
+
 - class JSONRPCError(RuntimeError)
 - class ServerError(JSONRPCError)
 - class ParseError(JSONRPCError)
@@ -413,27 +418,33 @@ loop.run_until_complete(run())
 - class MethodNotFound(JSONRPCError)
 - class InvalidParams(JSONRPCError)
 - class InternalError(JSONRPCError)
-- class EmptyResponse(JSONRPCError)                # client-side (no response received)
-- class RequestTimeoutError(JSONRPCError)          # client-side (response timed out)
-- class TransportError(JSONRPCError)               # client-side (send failed)
-- class HTTPStatusError(JSONRPCError)              # client-side (non-2xx with no parseable JSON)
-- DEFAULT_KNOWN_ERRORS
+- Client-side errors:
+  - EmptyResponse
+  - RequestTimeoutError
+  - TransportError
+  - HTTPStatusError
+- DEFAULT_KNOWN_ERRORS and DEFAULT_KNOWN_ERRORS_MAP
 
 ### middlewares
-- async def inject_request_middleware(request, handler) — puts the request object into extra kwargs under "rpc_request"; to pass it to your method, add the method with pass_extra_kwargs=True.
-- async def exception_middleware(request, handler) — converts exceptions to JSON-RPC errors.
-- async def logging_middleware(request, handler) — logs raw requests and responses.
-- async def inject_ws_client_middleware(request, handler) — attaches a WS client to context for server-initiated messages on the same socket.
-- DEFAULT_MIDDLEWARES = (exception_middleware, inject_request_middleware)
+
+- exception_middleware(request, handler) -> JSONRPCResponse
+- inject_request_middleware(request, handler) -> JSONRPCResponse
+- logging_middleware(request, handler) -> JSONRPCResponse
+- inject_ws_client_middleware(request, handler) -> JSONRPCResponse
+- check_origins(allowed_origins) -> middleware
+- DEFAULT_MIDDLEWARES
 
 ### utils
-- def json_serialize(value) -> str
-- def convert_params_to_args_and_kwargs(params) -> Tuple[Sequence, Mapping]
-- def parse_args_and_kwargs(args, kwargs) -> Tuple[Any, Sequence, Mapping]
-- def get_random_id() -> str
-- def collect_batch_result(batch_request, batch_response) -> Tuple[Any, ...]
+
+- json_serialize(value) -> str
+- json_deserialize(text) -> Any
+- convert_params_to_args_and_kwargs(params) -> Tuple[Sequence, Mapping]
+- parse_args_and_kwargs(args, kwargs) -> Tuple[Any, Sequence, Mapping]
+- get_random_id() -> str
+- collect_batch_result(batch_request, batch_response) -> Tuple[Any, ...]
 
 ### constants
+
 - NOTHING
 - VERSION_2_0
 
@@ -459,15 +470,15 @@ rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(ping_3, name='third_ping'))  # '
 rpc_server.add_methods([ping_3])                                   # 'ping_3'
 
 # Replace methods:
-rpc_server.add_method(ping_1, replace=True)                        # 'ping_1'
-rpc_server.add_methods([ping_1, ping_2], replace=True)             # 'ping_1', 'ping_2'
+rpc_server.add_method(ping_1, replace=True)
+rpc_server.add_methods([ping_1, ping_2], replace=True)
 
-# If a method needs "rpc_request", add with pass_extra_kwargs=True and enable inject_request_middleware:
+# Receive "rpc_request" (requires inject_request_middleware):
 async def ping_with_request(rpc_request): return 'pong with request'
 rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(ping_with_request, pass_extra_kwargs=True))
 ```
 
-Example with built-ins:
+Built-ins:
 
 ```python
 # Server
@@ -476,25 +487,22 @@ import aiohttp_rpc
 rpc_server = aiohttp_rpc.JSONRPCServer(middlewares=[aiohttp_rpc.middlewares.inject_request_middleware])
 rpc_server.add_method(sum)
 rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(zip, prepare_result=list))
-...
 
 # Client
-async with aiohttp_rpc.JSONRPCClient('/rpc') as rpc:
-    assert await rpc.methods.sum([1, 2, 3]) == 6
-    assert await rpc.methods.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
+# async with aiohttp_rpc.JSONRPCClient('/rpc') as rpc:
+#     assert await rpc.methods.sum([1, 2, 3]) == 6
+#     assert await rpc.methods.zip(['a', 'b'], [1, 2]) == [['a', 1], ['b', 2]]
 ```
 
-Example with the decorator:
+Decorator:
+
 ```python
 import aiohttp_rpc
 from aiohttp import web
 
 @aiohttp_rpc.rpc_method()  # pass_extra_kwargs=True by default
 def echo(*args, **kwargs):
-    return {
-        'args': args,
-        'kwargs': kwargs,
-    }
+    return {'args': args, 'kwargs': kwargs}
 
 if __name__ == '__main__':
     app = web.Application()
@@ -504,24 +512,25 @@ if __name__ == '__main__':
     web.run_app(app, host='0.0.0.0', port=8080)
 ```
 
-Pass extra HTTP parameters to aiohttp via direct_call/direct_batch:
+Pass extra aiohttp parameters for HTTP requests:
 
 ```python
 import aiohttp_rpc
+from aiohttp import ClientTimeout
 
 jsonrpc_request = aiohttp_rpc.JSONRPCRequest(method_name='test', params={'test_value': 1})
-async with aiohttp_rpc.JSONRPCClient('/rpc') as rpc:
+
+async with aiohttp_rpc.JSONRPCClient('http://0.0.0.0:8080/rpc') as rpc:
     await rpc.direct_call(
         jsonrpc_request,
         headers={'X-Custom-Header': 'custom value'},
-        timeout=10,
+        timeout=ClientTimeout(total=10),  # forwarded to aiohttp.ClientSession.post(...)
     )
 ```
 
 [back to top](#table-of-contents)
 
 ---
-
 
 ## License
 MIT

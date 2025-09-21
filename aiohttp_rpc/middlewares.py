@@ -100,7 +100,7 @@ def check_origins(allowed_origins: typing.Iterable[str]) -> typing.Callable:
         origin = http_request.headers.get('Origin')
 
         if origin not in allowed_origins:
-            raise web.HTTPForbidden(reason='Origin not allowed')
+            raise web.HTTPForbidden(reason='Origin not allowed.')
 
         return await handler(request)
 

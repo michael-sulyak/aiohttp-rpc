@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import typing
 
@@ -95,6 +96,9 @@ class WSJSONRPCClient(BaseJSONRPCClient):
         if self._pending:
             self._notify_all_about_error(errors.TransportError(data={'details': 'Client closed'}))
 
+        if self._message_worker is not None:
+            self._message_worker.cancel()  # ensure immediate exit
+
         if self.ws_connect is not None and not self._ws_connect_is_outer:
             await self.ws_connect.close()
 
@@ -102,7 +106,8 @@ class WSJSONRPCClient(BaseJSONRPCClient):
             await self.session.close()
 
         if self._message_worker is not None:
-            await self._message_worker
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._message_worker
 
         if self._check_worker is not None:
             self._check_worker.cancel()

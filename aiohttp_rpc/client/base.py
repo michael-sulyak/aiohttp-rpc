@@ -13,17 +13,17 @@ __all__ = (
 
 class BaseJSONRPCClient(abc.ABC):
     methods: JSONRPCClientMethods
-    error_map: typing.Mapping[int, typing.Type[errors.JSONRPCError]] = {
-        error.code: error
-        for error in errors.DEFAULT_KNOWN_ERRORS
-    }
+    error_map: typing.Mapping[int, typing.Type[errors.JSONRPCError]]
     _json_serialize: typedefs.JSONEncoderType
     _json_deserialize: typedefs.JSONDecoderType
 
     def __init__(self, *,
                  json_serialize: typedefs.JSONEncoderType = utils.json_serialize,
-                 json_deserialize: typedefs.JSONDecoderType = utils.json_deserialize) -> None:
+                 json_deserialize: typedefs.JSONDecoderType = utils.json_deserialize,
+                 error_map: typing.Mapping[int, typing.Type[errors.JSONRPCError]] = errors.DEFAULT_KNOWN_ERRORS_MAP,
+                 ) -> None:
         self.methods = JSONRPCClientMethods(self)
+        self.error_map = error_map
         self._json_serialize = json_serialize
         self._json_deserialize = json_deserialize
 
