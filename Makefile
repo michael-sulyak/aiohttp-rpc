@@ -33,7 +33,7 @@ test-all:
 	tox
 
 build: clean
-	python -m build
+	python3 -m build
 
 release: build
 	twine check dist/*
