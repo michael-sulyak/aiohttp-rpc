@@ -45,7 +45,7 @@ class BaseJSONRPCServer(abc.ABC):
             method = protocol.JSONRPCMethod(method)
 
         if not replace and method.name in self.methods:
-            raise errors.InvalidParams(data={'details': f'Method {method.name} has already been added.'})
+            raise errors.ServerConfigurationError(data={'details': f'Method {method.name} has already been added.'})
 
         self.methods[method.name] = method
 
@@ -149,7 +149,16 @@ class BaseJSONRPCServer(abc.ABC):
         except errors.JSONRPCError as e:
             return protocol.JSONRPCResponse(id=json_request.get('id'), error=e)
 
-        response = await self._middleware_chain(request)  # type: ignore
+        try:
+            response = await self._middleware_chain(request)  # type: ignore
+        except Exception:
+            logger.exception('Unexpected error in middleware')
+
+            return protocol.JSONRPCResponse(
+                id=request.id,
+                jsonrpc=request.jsonrpc,
+                error=errors.InternalError(),
+            )
 
         if response.is_notification:
             return None

@@ -398,7 +398,7 @@ rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(server_push, pass_extra_kwargs=T
   - responses: Tuple[JSONRPCResponse, ...]; dump(), load(...)
 
 - class JSONRPCMethod(BaseJSONRPCMethod)
-  - def __init__(self, func, *, name=None, pass_extra_kwargs=False, prepare_result=None)
+  - def __init__(self, func, *, name=None, pass_extra_kwargs=True, prepare_result=None)
     - prepare_result can be sync or async; if provided, it post-processes the method result.
 
 - class JSONRPCUnlinkedResults / JSONRPCDuplicatedResults

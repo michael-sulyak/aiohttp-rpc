@@ -11,7 +11,7 @@ __all__ = (
 
 def rpc_method(name: typing.Optional[str] = None, *,
                rpc_server: JSONRPCServer = default_rpc_server,
-               pass_extra_kwargs: bool = True,
+               pass_extra_kwargs: bool = False,
                prepare_result: typing.Optional[typing.Callable] = None) -> typing.Callable:
     def _decorator(func: typing.Callable) -> typing.Callable:
         rpc_server.add_method(JSONRPCMethod(

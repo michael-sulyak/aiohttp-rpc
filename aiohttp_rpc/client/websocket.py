@@ -111,7 +111,9 @@ class WSJSONRPCClient(BaseJSONRPCClient):
 
         if self._check_worker is not None:
             self._check_worker.cancel()
-            await self._check_worker
+
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._check_worker
 
         for task in tuple(self._background_tasks):
             task.cancel()
@@ -124,12 +126,16 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                         data: typing.Any, *,
                         ignore_response: bool = False,
                         **kwargs) -> typing.Tuple[typing.Any, typing.Optional[dict]]:
-
         if ignore_response:
             await self._send_raw_data(self._json_serialize(data), **kwargs)
             return None, None
 
         request_ids = self._get_ids_from_json(data)
+
+        if not request_ids:
+            await self._send_raw_data(self._json_serialize(data), **kwargs)
+            return None, None
+
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
 
@@ -205,6 +211,7 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                     http_websocket.WSMsgType.CLOSING,
                     http_websocket.WSMsgType.CLOSED,
             ):
+                self._notify_all_about_error(errors.ServerError(data={'details': 'Connection closed'}))
                 break
 
             if ws_msg.type != http_websocket.WSMsgType.TEXT:
@@ -254,12 +261,16 @@ class WSJSONRPCClient(BaseJSONRPCClient):
         if not json_response:
             return
 
-        if isinstance(json_response, typing.Mapping):
-            await self._handle_single_json_response(json_response, ws_msg=ws_msg)
-            return
+        try:
+            if isinstance(json_response, typing.Mapping):
+                await self._handle_single_json_response(json_response, ws_msg=ws_msg)
+                return
 
-        if isinstance(json_response, typing.Sequence):
-            await self._handle_json_responses(json_response, ws_msg=ws_msg)
+            if isinstance(json_response, typing.Sequence):
+                await self._handle_json_responses(json_response, ws_msg=ws_msg)
+                return
+        except Exception:
+            logger.exception('Unexpected exception in json response handling')
             return
 
         logger.warning('Couldn\'t process the response.', extra={

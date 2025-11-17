@@ -83,12 +83,12 @@ class JSONRPCRequest:
 
         utils.validate_jsonrpc(data['jsonrpc'])
 
-        if 'id' in data:
-            if data['id'] is None:
-                raise errors.InvalidRequest(data={'details': 'The "id" must not be null; omit it for notifications.'})
+        if not isinstance(data['method'], str) or not data['method']:
+            raise errors.InvalidRequest(data={'details': '"method" must be a non-empty string.'})
 
-            if not isinstance(data['id'], (int, str,)):
-                raise errors.InvalidRequest(data={'details': 'The "id" must be string or integer.'})
+        if 'id' in data:
+            if not isinstance(data['id'], (int, str,)) and data['id'] is not None:
+                raise errors.InvalidRequest(data={'details': 'The "id" must be string, integer or Null.'})
 
 
 @dataclass

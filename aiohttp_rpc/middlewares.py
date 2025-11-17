@@ -58,8 +58,8 @@ async def exception_middleware(request: protocol.JSONRPCRequest, handler: typing
 async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.Callable) -> protocol.JSONRPCResponse:
     raw_request = request.dump()
 
-    logger.info(
-        'JSON RPC Request id="%s" method="%s" params="%s"',
+    logger.debug(
+        'JSON-RPC Request id="%s" method="%s" params="%s"',
         raw_request.get('id', ''),
         raw_request['method'],
         raw_request.get('params', ''),
@@ -70,8 +70,8 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
 
     raw_response = response.dump()
 
-    logger.info(
-        'JSON RPC Response id="%s" method="%s" params="%s" result="%s" error="%s"',
+    logger.debug(
+        'JSON-RPC Response id="%s" method="%s" params="%s" result="%s" error="%s"',
         raw_request.get('id', ''),
         raw_request['method'],
         raw_request.get('params', ''),
@@ -85,7 +85,11 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
 
 async def inject_ws_client_middleware(request: protocol.JSONRPCRequest,
                                       handler: typing.Callable) -> protocol.JSONRPCResponse:
-    ws_connect = request.context['ws_connect']
+    """
+    Warning: This middleware can only be used for WebSocket JSON-RPC.
+    """
+
+    ws_connect = request.context['ws_connect']  # This value is provided by `WSJSONRPCServer`.
     request.context['ws_rpc_client'] = client.WSJSONRPCClient(ws_connect=ws_connect)
     request.extra_kwargs['ws_rpc_client'] = request.context['ws_rpc_client']
     return await handler(request)

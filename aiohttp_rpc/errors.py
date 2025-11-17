@@ -15,6 +15,7 @@ __all__ = (
     'RequestTimeoutError',
     'TransportError',
     'HTTPStatusError',
+    'ServerConfigurationError',
     'DEFAULT_KNOWN_ERRORS',
 )
 
@@ -93,7 +94,7 @@ class InternalError(JSONRPCError):
 
 
 class EmptyResponse(JSONRPCError):
-    """"Client-side error: no response was received."""
+    """Client-side error: no response was received."""
 
     code = -32050
     message = 'Empty Response'
@@ -118,6 +119,13 @@ class HTTPStatusError(JSONRPCError):
 
     code = -32053
     message = 'HTTP status error'
+
+
+class ServerConfigurationError(JSONRPCError):
+    """Client-side error: non-2xx HTTP status with no parseable JSON body."""
+
+    code = -32054
+    message = 'Server configuration error'
 
 
 LOCAL_ERRORS = frozenset({

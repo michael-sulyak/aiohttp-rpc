@@ -62,6 +62,9 @@ class JSONRPCMethod(BaseJSONRPCMethod):
         else:
             result = self.func(*args, **kwargs)
 
+            if inspect.isawaitable(result):
+                result = await result
+
         if self._prepare_result is not None:
             maybe_coro = self._prepare_result(result)
             result = await maybe_coro if inspect.isawaitable(maybe_coro) else maybe_coro
