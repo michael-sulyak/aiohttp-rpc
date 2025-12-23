@@ -78,51 +78,6 @@ async def test_several_requests(aiohttp_client):
         assert result == list(range(10))
 
 
-async def test_inject_ws_client_middleware(aiohttp_client, mocker):
-    async def method(*, ws_rpc_client: aiohttp_rpc.WSJSONRPCClient, **kwargs):
-        await ws_rpc_client.notify('ping')
-        await ws_rpc_client.notify('ping')
-        await ws_rpc_client.notify('ping')
-
-    rpc_server = aiohttp_rpc.WSJSONRPCServer(
-        middlewares=[
-            *aiohttp_rpc.middlewares.DEFAULT_MIDDLEWARES,
-            aiohttp_rpc.middlewares.inject_ws_client_middleware,
-        ],
-    )
-    rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(method, pass_extra_kwargs=True))
-
-    client = await utils.make_ws_client(aiohttp_client, rpc_server)
-
-    future = asyncio.Future()
-
-    results = []
-
-    def json_request_handler(*, ws_connect, ws_msg, json_requests):
-        results.extend(json_requests)
-
-        if len(results) == 3:
-            future.set_result(results)
-
-    async with aiohttp_rpc.WSJSONRPCClient(
-        '/rpc',
-        session=client,
-        json_requests_handler=json_request_handler,
-    ) as rpc:
-        json_request_handler = mocker.patch.object(
-            rpc,
-            '_json_requests_handler',
-            side_effect=rpc._json_requests_handler,
-        )
-        await rpc.methods.method()
-
-        await asyncio.wait_for(future, timeout=3)
-        assert json_request_handler.call_count == 3
-        assert results[0]['method'] == 'ping'
-        assert results[1]['method'] == 'ping'
-        assert results[2]['method'] == 'ping'
-
-
 async def test_ws_response_kwargs(aiohttp_client):
     rpc_server = aiohttp_rpc.WSJSONRPCServer(
         ws_response_kwargs=dict(

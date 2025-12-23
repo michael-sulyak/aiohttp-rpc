@@ -211,7 +211,7 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                     http_websocket.WSMsgType.CLOSING,
                     http_websocket.WSMsgType.CLOSED,
             ):
-                self._notify_all_about_error(errors.ServerError(data={'details': 'Connection closed'}))
+                self._notify_all_about_error(errors.ServerError(data={'details': 'Connection closed.'}))
                 break
 
             if ws_msg.type != http_websocket.WSMsgType.TEXT:

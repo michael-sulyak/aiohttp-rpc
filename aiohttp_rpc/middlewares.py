@@ -3,7 +3,7 @@ import typing
 
 from aiohttp import web
 
-from . import client, errors, protocol
+from . import errors, protocol
 
 
 __all__ = (
@@ -89,9 +89,11 @@ async def inject_ws_client_middleware(request: protocol.JSONRPCRequest,
     Warning: This middleware can only be used for WebSocket JSON-RPC.
     """
 
-    ws_connect = request.context['ws_connect']  # This value is provided by `WSJSONRPCServer`.
-    request.context['ws_rpc_client'] = client.WSJSONRPCClient(ws_connect=ws_connect)
-    request.extra_kwargs['ws_rpc_client'] = request.context['ws_rpc_client']
+    ws_rpc_client = request.context.get('ws_rpc_client')  # This value is provided by `WSJSONRPCServer`.
+
+    if ws_rpc_client is not None:
+        request.extra_kwargs['ws_rpc_client'] = ws_rpc_client
+
     return await handler(request)
 
 

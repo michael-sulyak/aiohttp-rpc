@@ -317,7 +317,7 @@ To allow a method to send JSON-RPC requests back to the client over the same Web
 ```python
 import aiohttp_rpc
 
-async def server_push(ws_rpc_client):  # <-- added by middleware
+async def server_push(*, ws_rpc_client):  # <-- added by middleware
     # call back to the connected client:
     return await ws_rpc_client.call('client_method', 42)
 
