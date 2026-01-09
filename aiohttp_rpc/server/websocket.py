@@ -76,24 +76,31 @@ class WSJSONRPCServer(BaseJSONRPCServer):
 
         ws_msg: http_websocket.WSMessage
 
-        async for ws_msg in ws_connect:
-            if ws_msg.type != http_websocket.WSMsgType.TEXT:
-                continue
+        try:
+            async for ws_msg in ws_connect:
+                if ws_msg.type != http_websocket.WSMsgType.TEXT:
+                    continue
 
-            coro = self._handle_ws_message(
-                ws_msg=ws_msg,
-                ws_connect=ws_connect,
-                context={
-                    'http_request': http_request,
-                    'ws_connect': ws_connect,
-                },
-            )
+                coro = self._handle_ws_message(
+                    ws_msg=ws_msg,
+                    ws_connect=ws_connect,
+                    context={
+                        'http_request': http_request,
+                        'ws_connect': ws_connect,
+                    },
+                )
 
-            task = asyncio.create_task(coro)
+                task = asyncio.create_task(coro)
 
-            # To avoid a task disappearing mid execution:
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
+                # To avoid a task disappearing mid execution:
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
+        finally:
+            if not ws_connect.closed:
+                await ws_connect.close()
+
+            logger.debug('WS closed: %s', ws_connect.close_code)
+            self.rpc_websockets.discard(ws_connect)
 
         return ws_connect
 
@@ -105,7 +112,7 @@ class WSJSONRPCServer(BaseJSONRPCServer):
             input_data = self._json_deserialize(ws_msg.data)
         except json.JSONDecodeError:
             logger.warning('Invalid JSON data: %s', ws_msg.data, exc_info=True)
-            output_data = protocol.JSONRPCResponse(error=errors.ParseError(data={'details': 'Invalid JSON'}))
+            output_data = protocol.JSONRPCResponse(error=errors.ParseError(data={'details': 'Invalid JSON.'}))
         else:
             if self._looks_like_response(input_data):
                 if self._json_response_handler is not None:
@@ -117,9 +124,11 @@ class WSJSONRPCServer(BaseJSONRPCServer):
                 else:
                     logger.debug('WS server received response-shaped message but no handler is set.')
 
-                return
-
-            output_data = await self._process_input_data(input_data, context=context)  # type: ignore
+                output_data = protocol.JSONRPCResponse(
+                    error=errors.InvalidRequest(data={'details': 'Expect request, but got response-shaped message.'}),
+                )
+            else:
+                output_data = await self._process_input_data(input_data, context=context)  # type: ignore
 
         if output_data is None:
             return

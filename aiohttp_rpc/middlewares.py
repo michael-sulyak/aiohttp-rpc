@@ -10,7 +10,6 @@ __all__ = (
     'exception_middleware',
     'inject_request_middleware',
     'logging_middleware',
-    'inject_ws_client_middleware',
     'check_origins',
     'DEFAULT_MIDDLEWARES',
 )
@@ -81,20 +80,6 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
     )
 
     return response
-
-
-async def inject_ws_client_middleware(request: protocol.JSONRPCRequest,
-                                      handler: typing.Callable) -> protocol.JSONRPCResponse:
-    """
-    Warning: This middleware can only be used for WebSocket JSON-RPC.
-    """
-
-    ws_rpc_client = request.context.get('ws_rpc_client')  # This value is provided by `WSJSONRPCServer`.
-
-    if ws_rpc_client is not None:
-        request.extra_kwargs['ws_rpc_client'] = ws_rpc_client
-
-    return await handler(request)
 
 
 def check_origins(allowed_origins: typing.Iterable[str]) -> typing.Callable:

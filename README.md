@@ -228,7 +228,6 @@ Included middlewares:
 - exception_middleware — catches exceptions, converts to JSON-RPC errors (logging included).
 - inject_request_middleware — stores the request object in extra kwargs as "rpc_request". Methods receive it only if added with pass_extra_kwargs=True.
 - logging_middleware — logs raw JSON-RPC requests and responses.
-- inject_ws_client_middleware — on WS server, attaches a WS client to the request so your method can send JSON-RPC messages back over the same socket (see below).
 - check_origins(allowed_origins) — factory returning middleware that permits only the listed HTTP Origin values (for HTTP endpoints).
 
 DEFAULT_MIDDLEWARES:
@@ -325,7 +324,6 @@ rpc_server = aiohttp_rpc.WSJSONRPCServer(
     middlewares=[
         aiohttp_rpc.middlewares.exception_middleware,
         aiohttp_rpc.middlewares.inject_request_middleware,
-        aiohttp_rpc.middlewares.inject_ws_client_middleware,  # attaches ws_rpc_client
     ],
 )
 rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(server_push, pass_extra_kwargs=True))
@@ -430,7 +428,6 @@ rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(server_push, pass_extra_kwargs=T
 - exception_middleware(request, handler) -> JSONRPCResponse
 - inject_request_middleware(request, handler) -> JSONRPCResponse
 - logging_middleware(request, handler) -> JSONRPCResponse
-- inject_ws_client_middleware(request, handler) -> JSONRPCResponse
 - check_origins(allowed_origins) -> middleware
 - DEFAULT_MIDDLEWARES
 
