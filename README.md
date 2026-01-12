@@ -309,26 +309,6 @@ async def run():
 asyncio.run(run())
 ```
 
-### Server-initiated messages over the same WS
-
-To allow a method to send JSON-RPC requests back to the client over the same WebSocket connection, enable the middleware and declare the parameter:
-
-```python
-import aiohttp_rpc
-
-async def server_push(*, ws_rpc_client):  # <-- added by middleware
-    # call back to the connected client:
-    return await ws_rpc_client.call('client_method', 42)
-
-rpc_server = aiohttp_rpc.WSJSONRPCServer(
-    middlewares=[
-        aiohttp_rpc.middlewares.exception_middleware,
-        aiohttp_rpc.middlewares.inject_request_middleware,
-    ],
-)
-rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(server_push, pass_extra_kwargs=True))
-```
-
 [back to top](#table-of-contents)
 
 ---
@@ -404,7 +384,7 @@ rpc_server.add_method(aiohttp_rpc.JSONRPCMethod(server_push, pass_extra_kwargs=T
 
 ### decorators
 
-- def rpc_method(name: Optional[str] = None, *, rpc_server=default_rpc_server, pass_extra_kwargs=True, prepare_result=None)
+- def rpc_method(name: Optional[str] = None, *, rpc_server=default_rpc_server, pass_extra_kwargs=False, prepare_result=None)
   - Registers the function on the default HTTP rpc_server at import time.
 
 ### errors

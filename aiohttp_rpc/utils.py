@@ -1,7 +1,6 @@
 import json
 import typing
 import uuid
-from functools import partial
 
 from . import constants, errors
 
@@ -22,7 +21,7 @@ def convert_params_to_args_and_kwargs(params: typing.Any) -> typing.Tuple[typing
         return (), {}
 
     if isinstance(params, constants.JSON_PRIMITIVE_TYPES):
-        raise errors.InvalidRequest(f'Params must be an array or object per JSON-RPC 2.0. {params}')
+        raise errors.InvalidParams(f'Params must be an array or object per JSON-RPC 2.0. {params}')
 
     if isinstance(params, typing.Sequence):
         return params, {}
@@ -99,5 +98,5 @@ def collect_batch_result(batch_request: 'protocol.JSONRPCBatchRequest',
     )
 
 
-json_serialize = partial(json.dumps, default=lambda x: f'<non-serializable {type(x).__name__}>')
+json_serialize = json.dumps
 json_deserialize = json.loads

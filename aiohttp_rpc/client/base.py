@@ -123,7 +123,11 @@ class BaseJSONRPCClient(abc.ABC):
         if not json_response:
             raise errors.ParseError('Server returned an empty batch response.')
 
-        return protocol.JSONRPCBatchResponse.load(json_response, error_map=self.error_map)
+        return protocol.JSONRPCBatchResponse.load(
+            json_response,
+            error_map=self.error_map,
+            context=context,
+        )
 
     @abc.abstractmethod
     async def send_json(self,

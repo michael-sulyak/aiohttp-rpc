@@ -1,5 +1,3 @@
-import sys
-import traceback
 import typing
 
 
@@ -51,16 +49,6 @@ class JSONRPCError(RuntimeError):
             and self.message == other.message
             and self.data == other.data
         )
-
-    def attach_traceback(self, traceback_exception=None) -> None:
-        if not traceback_exception:
-            traceback_exception = traceback.TracebackException(*sys.exc_info())
-
-        if self.data is None:
-            self.data = {}
-
-        if isinstance(self.data, typing.MutableMapping):
-            self.data['traceback_exception'] = ''.join(traceback_exception.format()).split('\n')
 
 
 class ServerError(JSONRPCError):
@@ -122,7 +110,7 @@ class HTTPStatusError(JSONRPCError):
 
 
 class ServerConfigurationError(JSONRPCError):
-    """Client-side error: non-2xx HTTP status with no parseable JSON body."""
+    """Server-side error: some issues with configuration."""
 
     code = -32054
     message = 'Server configuration error'

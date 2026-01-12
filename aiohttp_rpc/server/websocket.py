@@ -6,6 +6,7 @@ import weakref
 
 from aiohttp import http_websocket, web, web_ws
 
+from . import utils as ws_utils
 from .base import BaseJSONRPCServer
 from .. import errors, protocol, typedefs
 
@@ -42,7 +43,7 @@ class WSJSONRPCServer(BaseJSONRPCServer):
         self._background_tasks = set()
 
     async def handle_http_request(self, http_request: web.Request) -> web.StreamResponse:
-        if http_request.method != 'GET' or http_request.headers.get('upgrade', '').lower() != 'websocket':
+        if not ws_utils.can_prepare_ws_request(http_request):
             raise web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('GET',))
 
         if self.allowed_origins is not None:
@@ -124,11 +125,9 @@ class WSJSONRPCServer(BaseJSONRPCServer):
                 else:
                     logger.debug('WS server received response-shaped message but no handler is set.')
 
-                output_data = protocol.JSONRPCResponse(
-                    error=errors.InvalidRequest(data={'details': 'Expect request, but got response-shaped message.'}),
-                )
-            else:
-                output_data = await self._process_input_data(input_data, context=context)  # type: ignore
+                return
+
+            output_data = await self._process_input_data(input_data, context=context)  # type: ignore
 
         if output_data is None:
             return

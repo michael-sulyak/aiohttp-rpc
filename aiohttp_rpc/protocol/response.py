@@ -63,7 +63,10 @@ class JSONRPCResponse:
         if not isinstance(data, typing.Mapping):
             raise errors.ParseError('Data must be a mapping.')
 
-        utils.validate_jsonrpc(data.get('jsonrpc'))
+        try:
+            utils.validate_jsonrpc(data.get('jsonrpc'))
+        except errors.InvalidRequest as error:
+            raise errors.ParseError(error.message)
 
         has_result = 'result' in data
         has_error = 'error' in data

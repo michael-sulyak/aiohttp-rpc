@@ -144,9 +144,6 @@ class WSJSONRPCClient(BaseJSONRPCClient):
 
         await self._send_raw_data(self._json_serialize(data), **kwargs)
 
-        if not request_ids:
-            return None, None
-
         try:
             result = await asyncio.wait_for(future, timeout=self._timeout) if self._timeout is not None else future
         except asyncio.TimeoutError as e:
@@ -287,6 +284,10 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                     ws_msg=ws_msg,
                     json_requests=(json_response,),
                 )
+            else:
+                logger.warning('Couldn\'t process the response that looks like request.', extra={
+                    'json_response': json_response,
+                })
         elif 'id' in json_response and json_response['id'] in self._pending:
             self._notify_about_result(json_response['id'], json_response)
         elif self._unprocessed_json_responses_handler is not None:
@@ -295,6 +296,10 @@ class WSJSONRPCClient(BaseJSONRPCClient):
                 ws_msg=ws_msg,
                 json_responses=(json_response,),
             )
+        else:
+            logger.warning('Couldn\'t process the response without proper "id".', extra={
+                'json_response': json_response,
+            })
 
     async def _handle_json_responses(self, json_responses: typing.Sequence, *, ws_msg: web_ws.WSMessage) -> None:
         assert self.ws_connect is not None
@@ -339,14 +344,14 @@ class WSJSONRPCClient(BaseJSONRPCClient):
     def _notify_about_results(self,
                               response_ids: typing.Sequence[typedefs.JSONRPCIDType],
                               json_response: typing.Sequence) -> None:
-        is_processed = False
-
         for response_id in response_ids:
             future = self._pending.pop(response_id, None)
 
-            if future is not None and not is_processed:
-                # We suppose that a batch result has the same ids that we sent.
-                # And these ids have the same future.
+            if future is None:
+                continue
 
-                future.set_result(json_response)
-                is_processed = True
+            if not future.done():
+                try:
+                    future.set_result(json_response)
+                except asyncio.InvalidStateError:
+                    pass
