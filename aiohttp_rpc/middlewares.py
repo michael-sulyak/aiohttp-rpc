@@ -29,7 +29,7 @@ async def exception_middleware(request: protocol.JSONRPCRequest, handler: typing
     except errors.JSONRPCError as e:
         logger.warning(
             'Unprocessed JSONRPCError for method="%s" id="%s"',
-            request.method_name,
+            request.method,
             request.id,
             exc_info=True,
         )
@@ -41,7 +41,7 @@ async def exception_middleware(request: protocol.JSONRPCRequest, handler: typing
     except Exception as e:
         logger.exception(
             'Unhandled exception for method="%s" id="%s": %s',
-            request.method_name,
+            request.method,
             request.id,
             e,
         )
@@ -82,7 +82,7 @@ async def logging_middleware(request: protocol.JSONRPCRequest, handler: typing.C
     return response
 
 
-def check_origins(allowed_origins: typing.Iterable[str | None]) -> typing.Callable:
+def check_origins(allowed_origins: typing.Iterable[typing.Optional[str]]) -> typing.Callable:
     allowed_origins = set(allowed_origins)
 
     async def _check_origins(request: protocol.JSONRPCRequest,

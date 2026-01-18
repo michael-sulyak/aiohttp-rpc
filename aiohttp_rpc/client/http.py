@@ -49,15 +49,18 @@ class JSONRPCClient(BaseJSONRPCClient):
         assert self.session is not None
 
         try:
-            http_response = await self.session.post(self.url, json=data, **kwargs)
-        except (aiohttp.ClientError, asyncio.TimeoutError,) as e:
+            async with self.session.post(self.url, json=data, **kwargs) as http_response:
+                context = {'http_response': http_response}
+
+                if ignore_response:
+                    # Read and discard to keep connection reusable.
+                    await http_response.read()
+                    return None, context
+
+                body_bytes = await http_response.read()
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             raise errors.TransportError from e
-
-        if ignore_response:
-            await http_response.read()
-            return None, {'http_response': http_response}
-
-        body_bytes = await http_response.read()
 
         if body_bytes:
             body_text = body_bytes.strip().decode(
@@ -93,8 +96,9 @@ class JSONRPCClient(BaseJSONRPCClient):
                 data={
                     'status': http_response.status,
                     'message': http_response.reason,
-                    'body': body_text[:512]},
+                    'body': body_text[:512],
+                },
             ) from e
 
         # If we got JSON, hand it to the protocol layer even on non-2xx:
-        return json_response, {'http_response': http_response}
+        return json_response, context

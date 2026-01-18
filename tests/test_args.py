@@ -163,10 +163,10 @@ async def test_builtin_funcs(aiohttp_client):
 
 
 def test_empty_args():
-    requests_1 = aiohttp_rpc.JSONRPCRequest(method_name='echo')
-    request_2 = aiohttp_rpc.JSONRPCRequest(method_name='echo', args=[])
+    requests_1 = aiohttp_rpc.JSONRPCRequest(method='echo')
+    request_2 = aiohttp_rpc.JSONRPCRequest(method='echo', args=[])
     assert 'params' not in requests_1.dump()
-    assert 'params' not in request_2.dump()
+    assert 'params' in request_2.dump()
 
 
 async def test_echo_with_explicit_empty_args(aiohttp_client):

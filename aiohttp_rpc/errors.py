@@ -15,6 +15,7 @@ __all__ = (
     'HTTPStatusError',
     'ServerConfigurationError',
     'DEFAULT_KNOWN_ERRORS',
+    'DEFAULT_KNOWN_ERRORS_MAP',
 )
 
 
@@ -32,7 +33,7 @@ class JSONRPCError(RuntimeError):
         self.data = data
         self.code = code or self.code
 
-        assert self.code, 'Error without a code is not allowed.'
+        assert self.code is not None, 'Error without a code is not allowed.'
         assert self.message, 'Error without a message is not allowed.'
 
     def __repr__(self) -> str:

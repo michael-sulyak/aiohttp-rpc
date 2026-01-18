@@ -18,9 +18,20 @@ logger = logging.getLogger(__name__)
 
 
 class JSONRPCServer(BaseJSONRPCServer):
+    allowed_origins: typing.Optional[typing.Container[str]]
+
+    def __init__(self, *args, allowed_origins: typing.Optional[typing.Container[str]] = None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.allowed_origins = allowed_origins
+
     async def handle_http_request(self, http_request: web.Request) -> web.Response:
         if http_request.method != 'POST':
             raise web.HTTPMethodNotAllowed(method=http_request.method, allowed_methods=('POST',))
+
+        if self.allowed_origins is not None:
+            origin = http_request.headers.get('Origin')
+            if origin not in self.allowed_origins:
+                raise web.HTTPForbidden(reason='Origin not allowed.')
 
         try:
             input_data = await http_request.json(loads=self._json_deserialize)

@@ -58,7 +58,7 @@ class WSJSONRPCServer(BaseJSONRPCServer):
         # https://docs.aiohttp.org/en/stable/web_advanced.html#graceful-shutdown
 
         for ws in self.rpc_websockets:
-            await ws.close(code=http_websocket.WSCloseCode.GOING_AWAY, message='Server shutdown')
+            await ws.close(code=http_websocket.WSCloseCode.GOING_AWAY, message=b'Server shutdown')
 
         self.rpc_websockets.clear()
 

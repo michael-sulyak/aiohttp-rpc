@@ -23,16 +23,22 @@ class JSONRPCClientMethod:
         await self._client.notify(self._method_name, *args, **kwargs)
 
     def request(self, *args, **kwargs) -> protocol.JSONRPCRequest:
+        args = args if args else None  # type: ignore
+        kwargs = kwargs if kwargs else None  # type: ignore
+
         return protocol.JSONRPCRequest(
             id=utils.get_random_id(),
-            method_name=self._method_name,
+            method=self._method_name,
             args=args,
             kwargs=kwargs,
         )
 
     def notification(self, *args, **kwargs) -> protocol.JSONRPCRequest:
+        args = args if args else None  # type: ignore
+        kwargs = kwargs if kwargs else None  # type: ignore
+
         return protocol.JSONRPCRequest(
-            method_name=self._method_name,
+            method=self._method_name,
             args=args,
             kwargs=kwargs,
         )

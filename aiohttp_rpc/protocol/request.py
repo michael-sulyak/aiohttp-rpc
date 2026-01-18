@@ -12,7 +12,7 @@ __all__ = (
 
 @dataclass
 class JSONRPCRequest:
-    method_name: str
+    method: str
     # If `id` is `None` then `JSONRPCRequest` is a notification.
     id: typing.Optional[typedefs.JSONRPCIDType] = None
     jsonrpc: str = constants.VERSION_2_0
@@ -53,7 +53,7 @@ class JSONRPCRequest:
 
         return cls(
             id=data.get('id'),
-            method_name=data['method'],
+            method=data['method'],
             params=data.get('params', constants.NOTHING),
             jsonrpc=data['jsonrpc'],
             **kwargs,
@@ -61,7 +61,7 @@ class JSONRPCRequest:
 
     def dump(self) -> typing.Mapping[str, typing.Any]:
         data: typing.Dict[str, typing.Any] = {
-            'method': self.method_name,
+            'method': self.method,
             'jsonrpc': self.jsonrpc,
         }
 
@@ -101,7 +101,7 @@ class JSONRPCBatchRequest:
 
     @classmethod
     def load(cls, data: typing.Any, **kwargs) -> 'JSONRPCBatchRequest':
-        if not isinstance(data, typing.Sequence):
+        if not isinstance(data, typing.Sequence) or isinstance(data, (str, bytes,)):
             raise errors.InvalidRequest('A batch request must be of the list type.')
 
         return cls(requests=tuple(

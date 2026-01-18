@@ -75,33 +75,33 @@ import aiohttp_rpc
 
 
 async def run():
-    async with aiohttp_rpc.JSONRPCClient('http://0.0.0.0:8080/rpc') as rpc:
-        # Idiomatic calls:
-        print('#1', await rpc.methods.ping())                      # No args
-        print('#2', await rpc.methods.echo('one', 'two'))          # Positional args
-        print('#3', await rpc.methods.echo(three='3'))             # Keyword args
+  async with aiohttp_rpc.JSONRPCClient('http://0.0.0.0:8080/rpc') as rpc:
+    # Idiomatic calls:
+    print('#1', await rpc.methods.ping())  # No args
+    print('#2', await rpc.methods.echo('one', 'two'))  # Positional args
+    print('#3', await rpc.methods.echo(three='3'))  # Keyword args
 
-        # Lower-level calls:
-        print('#4', await rpc.call('echo', three='3'))
-        await rpc.notify('echo', 123)                              # Notification
+    # Lower-level calls:
+    print('#4', await rpc.call('echo', three='3'))
+    await rpc.notify('echo', 123)  # Notification
 
-        # Direct call returns a JSONRPCResponse object:
-        resp = await rpc.direct_call(aiohttp_rpc.JSONRPCRequest(id=123, method_name='ping'))
-        print('#5', resp)
+    # Direct call returns a JSONRPCResponse object:
+    resp = await rpc.direct_call(aiohttp_rpc.JSONRPCRequest(id=123, method='ping'))
+    print('#5', resp)
 
-        # Batch calls (order preserved by default):
-        print('#6', await rpc.batch(
-            rpc.methods.ping.request(),
-            rpc.methods.echo.request('one', 'two'),
-            rpc.methods.echo.request(three='3'),
-        ))
+    # Batch calls (order preserved by default):
+    print('#6', await rpc.batch(
+      rpc.methods.ping.request(),
+      rpc.methods.echo.request('one', 'two'),
+      rpc.methods.echo.request(three='3'),
+    ))
 
-        # Fire-and-forget batch notifications:
-        await rpc.batch_notify(
-            rpc.methods.ping.notification(),
-            rpc.methods.echo.notification('one', 'two'),
-            rpc.methods.echo.notification(three='3'),
-        )
+    # Fire-and-forget batch notifications:
+    await rpc.batch_notify(
+      rpc.methods.ping.notification(),
+      rpc.methods.echo.notification('one', 'two'),
+      rpc.methods.echo.notification(three='3'),
+    )
 
 
 asyncio.run(run())
@@ -292,7 +292,7 @@ import aiohttp_rpc
 
 
 async def run():
-    async with aiohttp_rpc.WSJSONRPCClient('http://0.0.0.0:8080/rpc') as rpc:
+    async with aiohttp_rpc.WSJSONRPCClient('ws://0.0.0.0:8080/rpc') as rpc:
         print(await rpc.methods.ping())
         print(await rpc.methods.echo('request'))          # args
         await rpc.methods.echo.notify('notification')     # notification (no response)
@@ -363,7 +363,7 @@ asyncio.run(run())
 ### protocol
 
 - class JSONRPCRequest
-  - id: Union[int, str, None]; method_name: str; jsonrpc: str; extra_kwargs: MutableMapping; context: MutableMapping
+  - id: Union[int, str, None]; method: str; jsonrpc: str; extra_kwargs: MutableMapping; context: MutableMapping
   - params: Any; args: Optional[Sequence]; kwargs: Optional[Mapping]
   - is_notification: bool
   - methods: set_params(...), set_args_and_kwargs(...), dump(), load(...)
@@ -376,7 +376,7 @@ asyncio.run(run())
   - responses: Tuple[JSONRPCResponse, ...]; dump(), load(...)
 
 - class JSONRPCMethod(BaseJSONRPCMethod)
-  - def __init__(self, func, *, name=None, pass_extra_kwargs=True, prepare_result=None)
+  - def __init__(self, func, *, name=None, pass_extra_kwargs=False, prepare_result=None)
     - prepare_result can be sync or async; if provided, it post-processes the method result.
 
 - class JSONRPCUnlinkedResults / JSONRPCDuplicatedResults
@@ -477,7 +477,7 @@ Decorator:
 import aiohttp_rpc
 from aiohttp import web
 
-@aiohttp_rpc.rpc_method()  # pass_extra_kwargs=True by default
+@aiohttp_rpc.rpc_method()  # pass_extra_kwargs=False by default
 def echo(*args, **kwargs):
     return {'args': args, 'kwargs': kwargs}
 
@@ -495,14 +495,15 @@ Pass extra aiohttp parameters for HTTP requests:
 import aiohttp_rpc
 from aiohttp import ClientTimeout
 
-jsonrpc_request = aiohttp_rpc.JSONRPCRequest(method_name='test', params={'test_value': 1})
+
+jsonrpc_request = aiohttp_rpc.JSONRPCRequest(method='test', params={'test_value': 1})
 
 async with aiohttp_rpc.JSONRPCClient('http://0.0.0.0:8080/rpc') as rpc:
-    await rpc.direct_call(
-        jsonrpc_request,
-        headers={'X-Custom-Header': 'custom value'},
-        timeout=ClientTimeout(total=10),  # forwarded to aiohttp.ClientSession.post(...)
-    )
+  await rpc.direct_call(
+    jsonrpc_request,
+    headers={'X-Custom-Header': 'custom value'},
+    timeout=ClientTimeout(total=10),  # forwarded to aiohttp.ClientSession.post(...)
+  )
 ```
 
 [back to top](#table-of-contents)

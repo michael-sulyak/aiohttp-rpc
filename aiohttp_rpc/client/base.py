@@ -46,7 +46,9 @@ class BaseJSONRPCClient(abc.ABC):
         pass
 
     async def call(self, method_name: str, *args, **kwargs) -> typing.Any:
-        request = protocol.JSONRPCRequest(id=utils.get_random_id(), method_name=method_name, args=args, kwargs=kwargs)
+        args = args if args else None  # type: ignore
+        kwargs = kwargs if kwargs else None  # type: ignore
+        request = protocol.JSONRPCRequest(id=utils.get_random_id(), method=method_name, args=args, kwargs=kwargs)
         response = await self.direct_call(request)
 
         if response is None:
@@ -58,7 +60,9 @@ class BaseJSONRPCClient(abc.ABC):
         return response.result
 
     async def notify(self, method_name: str, *args, **kwargs) -> None:
-        request = protocol.JSONRPCRequest(method_name=method_name, args=args, kwargs=kwargs)
+        args = args if args else None  # type: ignore
+        kwargs = kwargs if kwargs else None  # type: ignore
+        request = protocol.JSONRPCRequest(method=method_name, args=args, kwargs=kwargs)
         await self.direct_call(request)
 
     async def batch(self,

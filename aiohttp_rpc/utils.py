@@ -35,8 +35,8 @@ def convert_params_to_args_and_kwargs(params: typing.Any) -> typing.Tuple[typing
 def parse_args_and_kwargs(args: typing.Optional[typing.Sequence],
                           kwargs: typing.Optional[typing.Mapping],
                           ) -> typing.Tuple[typing.Any, typing.Sequence, typing.Mapping]:
-    has_args = bool(args)
-    has_kwargs = bool(kwargs)
+    has_args = args is not None
+    has_kwargs = kwargs is not None
 
     if not has_args and not has_kwargs:
         return constants.NOTHING, (), {}  # type: ignore
@@ -91,7 +91,7 @@ def collect_batch_result(batch_request: 'protocol.JSONRPCBatchRequest',
             responses_map[response.id] = value
 
     return tuple(
-        unlinked_results or None
+        (unlinked_results or None)
         if request.is_notification
         else responses_map.get(request.id, unlinked_results or None)
         for request in batch_request.requests

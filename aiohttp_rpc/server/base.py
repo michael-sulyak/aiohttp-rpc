@@ -147,7 +147,9 @@ class BaseJSONRPCServer(abc.ABC):
         try:
             request = protocol.JSONRPCRequest.load(json_request, context=context)
         except errors.JSONRPCError as e:
-            return protocol.JSONRPCResponse(id=json_request.get('id'), error=e)
+            raw_id = json_request.get('id', None)
+            safe_id = raw_id if isinstance(raw_id, (int, str,)) else None
+            return protocol.JSONRPCResponse(id=safe_id, error=e)
 
         try:
             response = await self._middleware_chain(request)  # type: ignore
@@ -170,7 +172,7 @@ class BaseJSONRPCServer(abc.ABC):
 
         try:
             result = await self.call(
-                request.method_name,
+                request.method,
                 args=request.args,
                 kwargs=request.kwargs,
                 extra_kwargs=request.extra_kwargs,
