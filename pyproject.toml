@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aiohttp-rpc"
-version = "2.0.0b2"
+version = "2.0.0"
 description = "A simple JSON-RPC for aiohttp"
 readme = "README.md"
 requires-python = ">=3.8"
